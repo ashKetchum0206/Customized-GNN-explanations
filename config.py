@@ -1,4 +1,6 @@
 edge_list = None
+x = None 
+query_graphs = []
 
 '''
 need to define model and node_features

@@ -4,6 +4,7 @@ from collections import defaultdict
 import config
 from reward import reward
 from constraint import constraint
+from torch_geometric.data import Data
 
 class MCTSNode:
     def __init__(self, state, parent=None):
@@ -26,8 +27,9 @@ class MCTSNode:
         )
 
 class MCTS:
-    def __init__(self, edge_list, reward_function, constraint_function, C=1.4, num_simulations=1000, rollout_depth=5):
+    def __init__(self, x, edge_list, reward_function, constraint_function, C=1.4, num_simulations=1000, rollout_depth=5):
         self.edge_list = edge_list
+        self.x = x
         self.reward_function = reward_function
         self.constraint_function = constraint_function
         self.C = C
@@ -35,6 +37,7 @@ class MCTS:
         self.rollout_depth = rollout_depth
 
         config.edge_list = self.edge_list
+        config.x = self.x
 
     def select(self, node):
         """Selection step: Traverse tree using UCT until an expandable node is found."""
@@ -92,8 +95,21 @@ class MCTS:
         best_node = root.best_child(0)  # Set exploration weight to 0 for exploitation
         return best_node.state
 
-edge_list = [(1,2), (2,3), (1,3)]  # Example edge list
-mcts = MCTS(edge_list, reward, constraint, C=1.4, num_simulations=500, rollout_depth=3)
+x = torch.tensor([[1,0,0,0,0,0,0],
+                  [1,0,0,0,0,0,0],
+                  [1,0,0,0,0,0,0]], dtype = torch.float)
+
+edge_list = [(0,1), (1,2), (0,2)]  # Example edge list
+
+x_query = torch.tensor([[1,0,0,0,0,0,0],
+                  [1,0,0,0,0,0,0]],
+                dtype = torch.float)
+
+edge_index_query = torch.tensor([[0],[1]], dtype = torch.long)
+query = Data(x=target_x, edge_index=target_edge_list) 
+query_graphs.append(query)
+
+mcts = MCTS(x , edge_list, reward, constraint, C=1.4, num_simulations=500, rollout_depth=3)
 best_subset = mcts.search()
 
 print("Best edge indices:", best_subset)

@@ -2,10 +2,11 @@
 Reward calculation module for GNN explanation subgraph evaluation
 Implements interpretability, sparsity, and fidelity metrics with configurable weighting
 """
-
+from numpy import abs
 from typing import Dict
 import torch
-from config import model, edge_list, node_features, original_pred
+import config
+from config import model, edge_list, node_features, original_pred, edge_index
 from subgraph_matching import subgraph_score
 
 def compute_interpretability(selected_edges: torch.Tensor) -> float:
@@ -30,7 +31,7 @@ def compute_sparsity(selected_edges: torch.Tensor) -> int:
     Returns:
         int: Number of edges in explanation subgraph
     """
-    return selected_edges.size(0) # can try other sparsification metrics
+    return len(selected_edges) # can try other sparsification metrics
 
 def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, float]) -> float:
     """
@@ -44,16 +45,16 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
         float: Combined characterization score per PyG documentation
     """
     # Create masks for subgraph and complement
-    mask = torch.zeros(edge_list.size(1), dtype=torch.bool)
-    mask[selected_edges] = True
+    mask = torch.zeros(len(config.edge_list), dtype=torch.bool)
+    mask[list(selected_edges)] = True
     
     with torch.no_grad():
-        subgraph_pred = model(node_features, edge_list[:, mask])
-        complement_pred = model(node_features, edge_list[:, ~mask])
+        subgraph_pred = config.model(config.node_features, config.edge_index[:, mask])[0,config.original_pred].item()
+        complement_pred = config.model(config.node_features, config.edge_index[:, ~mask])[0,config.original_pred].item()
 
     # Calculate fidelity components
-    fidelity_plus = (original_pred - complement_pred).abs().item()
-    fidelity_minus = (original_pred - subgraph_pred).abs().item()
+    fidelity_plus = abs(config.original_prob - complement_pred)
+    fidelity_minus = abs(config.original_prob - subgraph_pred)
 
     # PyG characterization formula
     numerator = fidelity_weights['plus'] + fidelity_weights['minus']
@@ -85,7 +86,7 @@ def explanation_reward (selected_edges: torch.Tensor,
     Raises:
         ValueError: If input tensors have mismatched dimensions
     """
-    if selected_edges.size(0) == 0:
+    if len(selected_edges) == 0:
         return -float('inf')
 
     # Normalization constants (adjust based on dataset statistics)

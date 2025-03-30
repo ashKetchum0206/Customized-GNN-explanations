@@ -2,9 +2,6 @@ import math
 import random
 from collections import defaultdict
 import config
-from reward import reward
-from constraint import constraint
-from torch_geometric.data import Data
 
 class MCTSNode:
     def __init__(self, state, parent=None):
@@ -27,17 +24,25 @@ class MCTSNode:
         )
 
 class MCTS:
-    def __init__(self, x, edge_list, reward_function, constraint_function, C=1.4, num_simulations=1000, rollout_depth=5):
+    def __init__(self, main_model, x, edge_list, edge_index, reward_function, metric_weights, constraint_function, C=1.4, num_simulations=1000, rollout_depth=5):
+
+        self.main_model = main_model
         self.edge_list = edge_list
+        self.edge_index = edge_index
         self.x = x
         self.reward_function = reward_function
         self.constraint_function = constraint_function
         self.C = C
         self.num_simulations = num_simulations
         self.rollout_depth = rollout_depth
+        self.metric_weights = metric_weights
 
         config.edge_list = self.edge_list
-        config.x = self.x
+        config.node_features = self.x
+        config.edge_index = self.edge_index
+        config.model = self.main_model
+        config.original_pred = self.main_model(self.x, self.edge_index).argmax(dim = 1).item()
+        config.original_prob = self.main_model(self.x, self.edge_index)[0,config.original_pred].item()
 
     def select(self, node):
         """Selection step: Traverse tree using UCT until an expandable node is found."""
@@ -72,7 +77,7 @@ class MCTS:
                 current_state.add(action)
             available_actions.remove(action)
 
-        return self.reward_function(current_state)
+        return self.reward_function(current_state, self.metric_weights)
 
     def backpropagate(self, node, reward):
         """Backpropagate reward to update value estimates."""
@@ -94,23 +99,3 @@ class MCTS:
         # Return the best edge subset found
         best_node = root.best_child(0)  # Set exploration weight to 0 for exploitation
         return best_node.state
-
-x = torch.tensor([[1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0]], dtype = torch.float)
-
-edge_list = [(0,1), (1,2), (0,2)]  # Example edge list
-
-x_query = torch.tensor([[1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0]],
-                dtype = torch.float)
-
-edge_index_query = torch.tensor([[0],[1]], dtype = torch.long)
-query = Data(x=target_x, edge_index=target_edge_list) 
-query_graphs.append(query)
-
-mcts = MCTS(x , edge_list, reward, constraint, C=1.4, num_simulations=500, rollout_depth=3)
-best_subset = mcts.search()
-
-print("Best edge indices:", best_subset)
-print("Selected edges:", [edge_list[i] for i in best_subset])

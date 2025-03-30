@@ -1,6 +1,10 @@
 edge_list = None
-x = None 
+edge_index = None  
 query_graphs = []
+model = None 
+original_pred = None
+node_features = None 
+original_prob = 0
 
 '''
 need to define model and node_features

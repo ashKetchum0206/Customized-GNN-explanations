@@ -101,6 +101,7 @@ def explanation_reward (selected_edges: torch.Tensor,
     sparsity = compute_sparsity(selected_edges)
     fidelity = compute_fidelity(selected_edges, fidelity_weights)
 
+    # print(interpret)
     # Normalize metrics
     interpret_norm = interpret / norm['max_motif']
     sparsity_norm = sparsity / norm['max_edges']

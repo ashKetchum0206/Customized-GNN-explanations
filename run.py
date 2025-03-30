@@ -24,16 +24,18 @@ def to_networkx_graph(graph_data):
 
 x = torch.tensor([[1,0,0,0,0,0,0],
                   [1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0]], dtype = torch.float)
+                  [1,0,0,0,0,0,0],
+                  [1,0,0,0,0,0,0],
+                  [0,0,0,1,0,0,0]], dtype = torch.float)
 
-edge_list = [(0,1), (1,2), (0,2)]  # Example edge list
+edge_list = [(0,1), (1,2), (2,3), (3,4), (4,0)]  # Example edge list
 
 x_query = torch.tensor([[1,0,0,0,0,0,0],
                   [1,0,0,0,0,0,0]],
                 dtype = torch.float)
 
 edge_index_query = torch.tensor([[0],[1]], dtype = torch.long)
-query = to_networkx_graph(Data(x=x_query, edge_index=edge_index_query) )
+query = to_networkx_graph(Data(x=x_query, edge_index=edge_index_query))
 config.query_graphs.append(query)
 
 edge_index = torch.zeros((2,len(edge_list)), dtype = torch.long)

@@ -5,6 +5,7 @@ model = None
 original_pred = None
 node_features = None 
 original_prob = 0
+edge_attr = None
 
 '''
 need to define model and node_features

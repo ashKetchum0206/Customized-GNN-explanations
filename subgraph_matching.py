@@ -10,11 +10,16 @@ def to_networkx_graph(graph_data):
 
     # Add nodes with attributes
     for node_idx, node_attr in enumerate(graph_data.x):
-        G.add_node(node_idx, label=node_attr)  # Assuming node_attr has atomic numbers or types
+        G.add_node(node_idx, label=node_attr)  # Assuming node_attr contains node features
 
     # Add edges with attributes
-    for src, dst in graph_data.edge_index.t().tolist():
-        G.add_edge(src, dst)
+    edge_features = graph_data.edge_attr if hasattr(graph_data, 'edge_attr') and graph_data.edge_attr is not None else None
+
+    for edge_idx, (src, dst) in enumerate(graph_data.edge_index.t().tolist()):
+        if edge_features is not None:
+            G.add_edge(src, dst, weight=edge_features[edge_idx])  # Assuming edge_attr stores edge features
+        else:
+            G.add_edge(src, dst)
 
     return G
 
@@ -47,16 +52,21 @@ def subgraph_score(selected_edges):
         target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
 
     target_x = config.node_features[list(unique_nodes)]
-    target_graph_data = Data(x=target_x, edge_index=target_edge_list)
+    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(selected_edges)])
     target_graph = to_networkx_graph(target_graph_data)
 
+
     for query in query_graphs:
-        
-        matcher = GraphMatcher(target_graph, query,
-                    node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item())
+
+        matcher = GraphMatcher(
+            target_graph,
+            query,
+            node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item(),
+            edge_match=lambda e1, e2: e1['weight'].item() == e2['weight'].item()
+        )
 
         score += len(list(matcher.subgraph_isomorphisms_iter()))
-    
+
     return score
 
 

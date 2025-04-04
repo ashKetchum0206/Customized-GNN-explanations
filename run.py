@@ -55,6 +55,7 @@ for idx, edge in enumerate(edge_list):
 metric_weights = {'sparse':1, 'interpret':1, 'fidelity':1}
 
 main_model = GCN_2l()
+main_model.load_state_dict(torch.load('GCN_model.pth', map_location=torch.device('cpu'), weights_only = True))
 mcts = MCTS(main_model, x , edge_list, edge_index, explanation_reward, metric_weights, constraint, C=1.4, num_simulations=500, rollout_depth=3)
 best_subset = mcts.search()
 

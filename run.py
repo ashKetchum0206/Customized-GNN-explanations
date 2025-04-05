@@ -7,57 +7,90 @@ from constraint import constraint
 from model import GCN_2l
 import torch
 import networkx as nx
+import matplotlib.pyplot as plt
 from MCTS_algo import MCTS
+from utils import to_networkx_graph, mutag_dataset
 
-def to_networkx_graph(graph_data):
-    G = nx.Graph()
+print(len(config.query_graphs))
 
-    # Add nodes with attributes
-    for node_idx, node_attr in enumerate(graph_data.x):
-        G.add_node(node_idx, label=node_attr)  # Assuming node_attr contains node features
+# Load the pre-trained model
+main_model = GCN_2l()
+main_model.load_state_dict(torch.load('GCN_model.pth', map_location=torch.device('cpu'), weights_only=True))
 
-    # Add edges with attributes
-    edge_features = graph_data.edge_attr if hasattr(graph_data, 'edge_attr') and graph_data.edge_attr is not None else None
+# Define which graph from MUTAG to analyze
+graph_index = 0  # You can change this to analyze different molecules
 
-    for edge_idx, (src, dst) in enumerate(graph_data.edge_index.t().tolist()):
-        if edge_features is not None:
-            G.add_edge(src, dst, weight=edge_features[edge_idx])  # Assuming edge_attr stores edge features
-        else:
-            G.add_edge(src, dst)
+# Extract data from the selected graph
+x = mutag_dataset[graph_index].x
+edge_index = mutag_dataset[graph_index].edge_index
+# edge_attr = mutag_dataset[graph_index].edge_attr
+edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
 
-    return G
+# Create edge_list from edge_index
+edge_list = []
+for i in range(edge_index.size(1)):
+    src, dst = edge_index[0, i].item(), edge_index[1, i].item()
+    edge_list.append((src, dst))
 
-x = torch.tensor([[1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0],
-                  [0,0,0,1,0,0,0]], dtype = torch.float)
-
-edge_list = [(0,1), (1,2), (2,3), (3,4), (4,0)]  # Example edge list
-edge_attr = torch.tensor([1,1,1,1,1], dtype = torch.float)
+# Set edge_attr in config (needed by reward function)
 config.edge_attr = edge_attr
 
-x_query = torch.tensor([[1,0,0,0,0,0,0],
-                  [1,0,0,0,0,0,0]],
-                dtype = torch.float)
+# Define metric weights
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 0.5}
 
-edge_index_query = torch.tensor([[0],[1]], dtype = torch.long)
-edge_attr_query = torch.tensor([1],dtype = torch.float)
-query = to_networkx_graph(Data(x=x_query, edge_index=edge_index_query, edge_attr = edge_attr_query))
-
-config.query_graphs.append(query)
-
-edge_index = torch.zeros((2,len(edge_list)), dtype = torch.long)
-for idx, edge in enumerate(edge_list):
-    edge_index[0][idx] = edge[0]
-    edge_index[1][idx] = edge[1]
-
-metric_weights = {'sparse':1, 'interpret':1, 'fidelity':1}
-
-main_model = GCN_2l()
-main_model.load_state_dict(torch.load('GCN_model.pth', map_location=torch.device('cpu'), weights_only = True))
-mcts = MCTS(main_model, x , edge_list, edge_index, explanation_reward, metric_weights, constraint, C=1.4, num_simulations=500, rollout_depth=3)
+# Initialize and run MCTS
+print(f"Analyzing molecule {graph_index} from MUTAG dataset")
+mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
+            constraint, C=1.4, num_simulations=100, rollout_depth=len(edge_list))
 best_subset = mcts.search()
 
+# Print results
 print("Best edge indices:", best_subset)
 print("Selected edges:", [edge_list[i] for i in best_subset])
+
+''' Visualize Results '''
+# Create full graph (but convert tensor attributes to simple values)
+data = mutag_dataset[graph_index]
+G = nx.Graph()
+
+# Add nodes with simplified attributes
+for i in range(data.x.size(0)):
+    # Convert tensor attributes to simple values (e.g. first element or sum)
+    label = data.x[i].sum().item() if data.x[i].numel() > 0 else 0
+    G.add_node(i, label=label)
+
+# Add edges with simplified attributes
+for i in range(data.edge_index.size(1)):
+    src, dst = data.edge_index[0, i].item(), data.edge_index[1, i].item()
+    # Use a simple scalar weight instead of the full tensor
+    weight = 1.0
+    G.add_edge(src, dst, weight=weight)
+
+# Create explanation subgraph
+explanation_edges = [edge_list[i] for i in best_subset]
+explanation_graph = nx.Graph()
+
+# Add all nodes
+for node in G.nodes():
+    explanation_graph.add_node(node, **G.nodes[node])
+
+# Add only the selected edges
+for src, dst in explanation_edges:
+    if G.has_edge(src, dst):  # Make sure edge exists in original graph
+        explanation_graph.add_edge(src, dst, weight=1.0)
+
+# Plot both graphs
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.title("Original Graph")
+pos = nx.spring_layout(G, seed=42)  # Fixed layout for consistency
+nx.draw(G, pos=pos, with_labels=True, node_color='lightblue')
+
+plt.subplot(1, 2, 2)
+plt.title("Explanation Subgraph")
+nx.draw(explanation_graph, pos=pos, with_labels=True, node_color='lightgreen')
+
+plt.tight_layout()
+plt.savefig(f"explanation_graph_{graph_index}.png")
+print(f"Visualization saved as explanation_graph_{graph_index}.png")

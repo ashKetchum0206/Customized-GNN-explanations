@@ -39,13 +39,13 @@ def subgraph_score(selected_edges):
     target_graph = to_networkx_graph(target_graph_data)
 
 
-    for query in query_graphs:
+    for query_name, query_graph in query_graphs.items():
 
         matcher = GraphMatcher(
             target_graph,
-            query,
+            query_graph,
             node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item(),
-            edge_match=lambda e1, e2: e1['weight'].item() == e2['weight'].item()
+            edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
         )
 
         score += len(list(matcher.subgraph_isomorphisms_iter()))

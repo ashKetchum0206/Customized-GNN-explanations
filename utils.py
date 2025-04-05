@@ -78,7 +78,7 @@ def convert_to_undirected(dataset):
     return undirected_dataset
 
 
-mutag_dataset = torch.load('mutag_modified.pt')
+mutag_dataset = torch.load('mutag_modified.pt', weights_only=False)
 
 def create_submolecule(atom_indices, parent_graph_idx):
     """

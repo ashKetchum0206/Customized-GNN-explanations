@@ -35,7 +35,7 @@ def compute_sparsity(selected_edges: torch.Tensor) -> int:
 
 def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, float]) -> float:
     """
-    Calculate PyG-style characterization score combining fidelity+ and fidelity-
+    Calculate characterization score combining fidelity+ and fidelity-
 
     Args:
         selected_edges: Tensor of edge indices forming explanation subgraph
@@ -56,7 +56,7 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
     fidelity_plus = abs(config.original_prob - complement_pred)
     fidelity_minus = abs(config.original_prob - subgraph_pred)
 
-    # PyG characterization formula
+    # Characterization formula
     numerator = fidelity_weights['plus'] + fidelity_weights['minus']
     denominator = (fidelity_weights['plus'] / fidelity_plus) + \
                   (fidelity_weights['minus'] / (1 - fidelity_minus))

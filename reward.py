@@ -92,7 +92,7 @@ def explanation_reward (selected_edges: torch.Tensor,
     # Normalization constants (adjust based on dataset statistics)
     norm = {
         'max_motif': 1.0,        # define later
-        'max_edges': 1,          # define later
+        'max_edges': len(config.edge_list),          # define later
         'baseline_fidelity': 1.0 # define later
     }
 
@@ -107,9 +107,13 @@ def explanation_reward (selected_edges: torch.Tensor,
     sparsity_norm = sparsity / norm['max_edges']
     fidelity_norm = fidelity / norm['baseline_fidelity']
 
+    # print(interpret_norm, sparsity_norm, fidelity_norm)
     # Combine weighted metrics
     return (
-        - metric_weights['sparse'] * sparsity_norm + 
-        metric_weights['interpret'] * interpret_norm +
+        sparsity_norm,
+        interpret_norm,
+        fidelity_norm,
+        - metric_weights['sparse'] * sparsity_norm+
+        metric_weights['interpret'] * interpret_norm+
         metric_weights['fidelity'] * fidelity_norm
     )

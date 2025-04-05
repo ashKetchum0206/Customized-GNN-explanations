@@ -6,4 +6,6 @@ original_pred = None
 original_prob = 0
 query_graphs = []
 edge_attr = None
+query_norms = {}
+
 

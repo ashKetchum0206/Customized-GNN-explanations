@@ -2,6 +2,7 @@ import math
 import random
 from collections import defaultdict
 import config
+import numpy as np
 
 class MCTSNode:
     def __init__(self, state, parent=None):
@@ -15,7 +16,7 @@ class MCTSNode:
         """Check if all valid edges have been added to this state."""
         return all(edge in self.state or not constraint_fn(self.state | {edge}) for edge in all_edges)
 
-    def best_child(self, exploration_weight=1.0):
+    def best_child(self, exploration_weight=1):
         """Select the best child using UCT (Upper Confidence Bound for Trees)."""
         return max(
             self.children.values(),
@@ -36,6 +37,7 @@ class MCTS:
         self.num_simulations = num_simulations
         self.rollout_depth = rollout_depth
         self.metric_weights = metric_weights
+        self.best = [set(), (0,0,0,-np.inf)]
 
         config.edge_list = self.edge_list
         config.node_features = self.x
@@ -72,12 +74,20 @@ class MCTS:
         for _ in range(self.rollout_depth):
             if not available_actions:
                 break
+            
             action = random.choice(available_actions)
             if self.constraint_function(current_state | {action}):
                 current_state.add(action)
+                reward_tuple = self.reward_function(current_state, self.metric_weights)
+                current_reward = reward_tuple[3]
+                if(current_reward > self.best[1][3]):
+                    self.best[1] = reward_tuple
+                    self.best[0] = current_state
             available_actions.remove(action)
 
-        return self.reward_function(current_state, self.metric_weights)
+        # print(len(current_state))
+        reward_tuple = self.reward_function(current_state, self.metric_weights)
+        return reward_tuple[0] + reward_tuple[1] + reward_tuple[2]
 
     def backpropagate(self, node, reward):
         """Backpropagate reward to update value estimates."""
@@ -98,4 +108,4 @@ class MCTS:
         
         # Return the best edge subset found
         best_node = root.best_child(0)  # Set exploration weight to 0 for exploitation
-        return best_node.state
+        return self.best

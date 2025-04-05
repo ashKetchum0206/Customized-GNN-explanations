@@ -44,13 +44,13 @@ def subgraph_score(selected_edges):
         matcher = GraphMatcher(
             target_graph,
             query_graph,
-            node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item(),
-            edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
+            node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
+            # edge_match=lambda e1, e2: torch.all(e1['weight'] == e2['weight']).item()
         )
 
-        score += len(list(matcher.subgraph_isomorphisms_iter()))
+        if(config.query_norms[query_name] > 0): score += len(list(matcher.subgraph_isomorphisms_iter()))/config.query_norms[query_name]
 
-    return score
+    return score/len(query_graphs)
 
 
 

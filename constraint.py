@@ -29,6 +29,5 @@ def constraint(selected_edges):
                 dfs(neighbor)
     
     dfs(start_node)  # Start traversal
-    
     # Step 3: Check if all nodes in the selected edges are visited
     return visited == nodes

@@ -10,22 +10,21 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from MCTS_algo import MCTS
 from utils import to_networkx_graph, mutag_dataset
-
-print(len(config.query_graphs))
+from subgraph_matching import subgraph_score
+from networkx.algorithms.isomorphism import GraphMatcher
 
 # Load the pre-trained model
 main_model = GCN_2l()
 main_model.load_state_dict(torch.load('GCN_model.pth', map_location=torch.device('cpu'), weights_only=True))
 
 # Define which graph from MUTAG to analyze
-graph_index = 0  # You can change this to analyze different molecules
+graph_index = 57  # You can change this to analyze different molecules
 
 # Extract data from the selected graph
 x = mutag_dataset[graph_index].x
 edge_index = mutag_dataset[graph_index].edge_index
 # edge_attr = mutag_dataset[graph_index].edge_attr
 edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
-
 # Create edge_list from edge_index
 edge_list = []
 for i in range(edge_index.size(1)):
@@ -36,13 +35,28 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 0.5}
+metric_weights = {'sparse': 2.5, 'interpret': 1, 'fidelity': 5}
+
+for query_name, query_graph in config.query_graphs.items():
+
+    matcher = GraphMatcher(
+        to_networkx_graph(mutag_dataset[graph_index]),
+        query_graph,
+        node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
+        # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
+    )
+
+    config.query_norms[query_name] = len(list(matcher.subgraph_isomorphisms_iter()))
 
 # Initialize and run MCTS
 print(f"Analyzing molecule {graph_index} from MUTAG dataset")
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
-            constraint, C=1.4, num_simulations=100, rollout_depth=len(edge_list))
-best_subset = mcts.search()
+            constraint, C=10, num_simulations=1000, rollout_depth=200)
+result = mcts.search()
+best_subset = result[0]
+reward_tuple = result[1]
+
+print(f'Sparse:{reward_tuple[0]}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
 
 # Print results
 print("Best edge indices:", best_subset)

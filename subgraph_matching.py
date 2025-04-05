@@ -3,26 +3,9 @@ from torch_geometric.data import Data
 import networkx as nx
 from networkx.algorithms.isomorphism import GraphMatcher
 import torch
+from utils import to_networkx_graph
 
-# Function to convert DIG graph object to NetworkX graph
-def to_networkx_graph(graph_data):
-    G = nx.Graph()
-
-    # Add nodes with attributes
-    for node_idx, node_attr in enumerate(graph_data.x):
-        G.add_node(node_idx, label=node_attr)  # Assuming node_attr contains node features
-
-    # Add edges with attributes
-    edge_features = graph_data.edge_attr if hasattr(graph_data, 'edge_attr') and graph_data.edge_attr is not None else None
-
-    for edge_idx, (src, dst) in enumerate(graph_data.edge_index.t().tolist()):
-        if edge_features is not None:
-            G.add_edge(src, dst, weight=edge_features[edge_idx])  # Assuming edge_attr stores edge features
-        else:
-            G.add_edge(src, dst)
-
-    return G
-
+# Function to compute the score of a subgraph based on the number of query graphs it matches
 def subgraph_score(selected_edges):
 
     score = 0

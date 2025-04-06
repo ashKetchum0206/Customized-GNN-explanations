@@ -3,6 +3,8 @@ import config
 
 def constraint(selected_edges):
 
+    for edge in selected_edges:
+        if edge not in config.allowed: return False
     edge_list = config.edge_list
     if not selected_edges:
         return False  # No edges selected means no connectivity
@@ -30,4 +32,4 @@ def constraint(selected_edges):
     
     dfs(start_node)  # Start traversal
     # Step 3: Check if all nodes in the selected edges are visited
-    return visited == nodes
+    return visited == nodes and len(selected_edges) <= config.max_edges

@@ -48,9 +48,9 @@ def subgraph_score(selected_edges):
             # edge_match=lambda e1, e2: torch.all(e1['weight'] == e2['weight']).item()
         )
 
-        if(config.query_norms[query_name] > 0): score += len(list(matcher.subgraph_isomorphisms_iter()))/config.query_norms[query_name]
+        score += len(list(matcher.subgraph_isomorphisms_iter()))
 
-    return score/len(query_graphs)
+    return score/config.max_score
 
 
 

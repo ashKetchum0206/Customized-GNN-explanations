@@ -2,7 +2,7 @@ import math
 import random
 import config
 from torch_geometric.data import Data
-from reward import explanation_reward
+from reward import explanation_reward, similarity_score
 from constraint import constraint
 from model import GCN_2l
 import torch
@@ -12,6 +12,7 @@ from MCTS_algo import MCTS
 from utils import to_networkx_graph, mutag_dataset
 from subgraph_matching import subgraph_score
 from networkx.algorithms.isomorphism import GraphMatcher
+
 
 # Load the pre-trained model
 main_model = GCN_2l()
@@ -35,7 +36,7 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 2.5, 'interpret': 1, 'fidelity': 5}
+metric_weights = {'sparse': 1, 'interpret': 3, 'fidelity': 1}
 
 for query_name, query_graph in config.query_graphs.items():
 
@@ -46,21 +47,103 @@ for query_name, query_graph in config.query_graphs.items():
         # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
     )
 
-    config.query_norms[query_name] = len(list(matcher.subgraph_isomorphisms_iter()))
+    config.max_score += len(list(matcher.subgraph_isomorphisms_iter()))
 
 # Initialize and run MCTS
-print(f"Analyzing molecule {graph_index} from MUTAG dataset")
+config.max_edges = 12
+config.allowed = range(len(edge_list))
+print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
+
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
-            constraint, C=10, num_simulations=1000, rollout_depth=200)
+            constraint, C=10, num_simulations=100, rollout_depth=200)
 result = mcts.search()
 best_subset = result[0]
 reward_tuple = result[1]
+target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
+last_filled = 0 
+unique_nodes = set()
 
-print(f'Sparse:{reward_tuple[0]}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
+for idx,edge in enumerate(edge_list):
+    if(idx not in best_subset): continue
+    target_edge_list[0][last_filled] = edge[0]
+    target_edge_list[1][last_filled] = edge[1]
+    unique_nodes.add(edge[0])
+    unique_nodes.add(edge[1])
+    last_filled+=1
+
+unique_nodes = sorted(list(unique_nodes))
+mapping = {}
+for idx, node in enumerate(unique_nodes):
+    mapping[node] = idx
+
+for edge in range(target_edge_list.shape[1]):
+    target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
+    target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
+
+target_x = config.node_features[list(unique_nodes)]
+target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
+config.alter_graphs.append(target_graph_data)
+
+
+print('Stage 1 complete.')
+print(f'Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
+
+
+# Sample random graphs and get their explanations with the same user metrics preference
+for i in range(10):
+
+    k = 0.8
+    sampled_indices = random.sample(range(len(edge_list)), int(0.8*len(edge_list)))
+    config.allowed = sampled_indices
+    mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
+                constraint, C=10, num_simulations=100, rollout_depth=200)
+
+    result = mcts.search()
+    best_subset = result[0]
+
+    target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
+    last_filled = 0 
+    unique_nodes = set()
+
+    for idx,edge in enumerate(edge_list):
+        if(idx not in best_subset): continue
+        target_edge_list[0][last_filled] = edge[0]
+        target_edge_list[1][last_filled] = edge[1]
+        unique_nodes.add(edge[0])
+        unique_nodes.add(edge[1])
+        last_filled+=1
+    
+    unique_nodes = sorted(list(unique_nodes))
+    mapping = {}
+    for idx, node in enumerate(unique_nodes):
+        mapping[node] = idx
+
+    for edge in range(target_edge_list.shape[1]):
+        target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
+        target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
+
+    target_x = config.node_features[list(unique_nodes)]
+    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
+    config.alter_graphs.append(target_graph_data)
+
+print("Beginning Stage 2..")
+# Run MCTS with updated reward function
+config.allowed = range(len(edge_list))
+mcts = MCTS(main_model, x, edge_list, edge_index, similarity_score, metric_weights, 
+                constraint, stable = True, C=10, num_simulations=10, rollout_depth=200)
+
+result = mcts.search()
+best_subset = result[0]
+reward_stability = result[1]
+reward_tuple = explanation_reward(best_subset, metric_weights)
+
+print("Stage 2 complete.")
+print(f'Stability:{reward_stability}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
 
 # Print results
 print("Best edge indices:", best_subset)
 print("Selected edges:", [edge_list[i] for i in best_subset])
+
 
 ''' Visualize Results '''
 # Create full graph (but convert tensor attributes to simple values)

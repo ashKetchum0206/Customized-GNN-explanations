@@ -145,7 +145,7 @@ config.query_graphs = {
     "ester_group": create_submolecule([2,3,1], 7),  # Ester group
     "aromatic_oxy": create_submolecule([3,4,5], 7),  # Oxy-Benzene (or [3,4,5,6] or [3,4,5,9])
     "imidazole": create_submolecule(list(range(2,7)), 8),  # Imidazole (pseudo)
-    "amino_benzene": create_submolecule([5,6,17], 11),  # Amino-Benzene
+    # "amino_benzene": create_submolecule([5,6,17], 11),  # Amino-Benzene
     "ketone": create_submolecule([3,11,12,13], 17),  # Ketone
     "cyanide": create_submolecule([6,7], 19),  # Cyanide
     "iodo": create_submolecule([14,16], 21),  # Iodo

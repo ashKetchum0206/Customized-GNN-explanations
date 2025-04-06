@@ -25,7 +25,7 @@ class MCTSNode:
         )
 
 class MCTS:
-    def __init__(self, main_model, x, edge_list, edge_index, reward_function, metric_weights, constraint_function, C=1.4, num_simulations=1000, rollout_depth=5):
+    def __init__(self, main_model, x, edge_list, edge_index, reward_function, metric_weights, constraint_function, stable = False, C=1.4, num_simulations=1000, rollout_depth=5):
 
         self.main_model = main_model
         self.edge_list = edge_list
@@ -37,7 +37,12 @@ class MCTS:
         self.num_simulations = num_simulations
         self.rollout_depth = rollout_depth
         self.metric_weights = metric_weights
-        self.best = [set(), (0,0,0,-np.inf)]
+        self.stable = stable
+
+        if not stable:
+            self.best = [set(), (0,0,0,-np.inf)]
+        else:
+            self.best = [set(), -np.inf]
 
         config.edge_list = self.edge_list
         config.node_features = self.x
@@ -78,16 +83,30 @@ class MCTS:
             action = random.choice(available_actions)
             if self.constraint_function(current_state | {action}):
                 current_state.add(action)
-                reward_tuple = self.reward_function(current_state, self.metric_weights)
-                current_reward = reward_tuple[3]
-                if(current_reward > self.best[1][3]):
-                    self.best[1] = reward_tuple
-                    self.best[0] = current_state
+                if not self.stable: 
+                    reward_tuple = self.reward_function(current_state, self.metric_weights)
+                    current_reward = reward_tuple[3]
+                    if(current_reward > self.best[1][3]):
+                        self.best[1] = reward_tuple
+                        self.best[0] = current_state
+
+                else:
+                    reward = self.reward_function(current_state)
+                    if(reward > self.best[1]):
+                        self.best[1] = reward
+                        self.best[0] = current_state
+
             available_actions.remove(action)
 
         # print(len(current_state))
-        reward_tuple = self.reward_function(current_state, self.metric_weights)
-        return reward_tuple[0] + reward_tuple[1] + reward_tuple[2]
+
+        if not self.stable:
+            reward_tuple = self.reward_function(current_state, self.metric_weights)
+            return reward_tuple[0] + reward_tuple[1] + reward_tuple[2]
+        
+        else:
+            reward = self.reward_function(current_state)
+            return reward
 
     def backpropagate(self, node, reward):
         """Backpropagate reward to update value estimates."""

@@ -52,7 +52,7 @@ def similarity_score(selected_edges):
     for alter_graph in alter_graphs:
         score += similarity(target_graph_data, alter_graph)
 
-    return score/len(config.alter_graphs)
+    return [score/len(config.alter_graphs)]
 
 def compute_interpretability(selected_edges: torch.Tensor) -> float:
     """

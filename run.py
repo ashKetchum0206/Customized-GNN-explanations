@@ -12,6 +12,8 @@ from MCTS_algo import MCTS
 from utils import to_networkx_graph, mutag_dataset
 from subgraph_matching import subgraph_score
 from networkx.algorithms.isomorphism import GraphMatcher
+from tqdm import tqdm
+import torch.nn.functional as F
 
 
 # Load the pre-trained model
@@ -36,7 +38,7 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 3, 'fidelity': 1}
+metric_weights = {'sparse': 1, 'interpret': 5, 'fidelity': 1}
 
 for query_name, query_graph in config.query_graphs.items():
 
@@ -55,10 +57,19 @@ config.allowed = range(len(edge_list))
 print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
-            constraint, C=10, num_simulations=100, rollout_depth=200)
-result = mcts.search()
-best_subset = result[0]
-reward_tuple = result[1]
+            constraint, C=10, num_simulations=50, rollout_depth=100)
+present_state = set()
+best_subset = ()
+best_reward = [0,0,0,0]
+
+for _ in range(config.max_edges):
+    result = mcts.search(present_state).state
+    present_state = result
+    reward = explanation_reward(present_state, metric_weights)
+    if(reward[-1] >= best_reward[-1]):
+        best_reward = reward
+        best_subset = present_state
+
 target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
 last_filled = 0 
 unique_nodes = set()
@@ -86,21 +97,29 @@ config.alter_graphs.append(target_graph_data)
 
 
 print('Stage 1 complete.')
-print(f'Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
+print(f'Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
 
 
 # Sample random graphs and get their explanations with the same user metrics preference
-for i in range(10):
+for i in tqdm(range(10)):
 
     k = 0.8
     sampled_indices = random.sample(range(len(edge_list)), int(0.8*len(edge_list)))
     config.allowed = sampled_indices
-    mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
-                constraint, C=10, num_simulations=100, rollout_depth=200)
 
-    result = mcts.search()
-    best_subset = result[0]
+    present_state = set()
+    best_subset = ()
+    best_reward = [0,0,0,0]
 
+    for _ in range(config.max_edges):
+        result = mcts.search(present_state).state
+        present_state = result
+        reward = explanation_reward(present_state, metric_weights)
+        if(reward[-1] >= best_reward[-1]):
+            best_reward = reward
+            best_subset = present_state
+
+    # Idea: While calculating the similarity_score, weigh the similarity between those explanations that have better rewards more 
     target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
     last_filled = 0 
     unique_nodes = set()
@@ -129,16 +148,45 @@ for i in range(10):
 print("Beginning Stage 2..")
 # Run MCTS with updated reward function
 config.allowed = range(len(edge_list))
-mcts = MCTS(main_model, x, edge_list, edge_index, similarity_score, metric_weights, 
-                constraint, stable = True, C=10, num_simulations=10, rollout_depth=200)
+present_state = set()
+best_subset = ()
+best_reward = [0,0,0,0]
 
-result = mcts.search()
-best_subset = result[0]
-reward_stability = result[1]
+for _ in tqdm(range(config.max_edges)):
+    result = mcts.search(present_state).state
+    present_state = result
+    reward = similarity_score(present_state)
+    if(reward[-1] >= best_reward[-1]):
+        best_reward = reward
+        best_subset = present_state
+
+target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
+last_filled = 0 
+unique_nodes = set()
+
+for idx,edge in enumerate(edge_list):
+    if(idx not in best_subset): continue
+    target_edge_list[0][last_filled] = edge[0]
+    target_edge_list[1][last_filled] = edge[1]
+    unique_nodes.add(edge[0])
+    unique_nodes.add(edge[1])
+    last_filled+=1
+
+unique_nodes = sorted(list(unique_nodes))
+mapping = {}
+for idx, node in enumerate(unique_nodes):
+    mapping[node] = idx
+
+for edge in range(target_edge_list.shape[1]):
+    target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
+    target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
+
+target_x = config.node_features[list(unique_nodes)]
+target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
+
 reward_tuple = explanation_reward(best_subset, metric_weights)
-
 print("Stage 2 complete.")
-print(f'Stability:{reward_stability}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}')
+print(f'Stability:{best_reward[0]}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
 
 # Print results
 print("Best edge indices:", best_subset)

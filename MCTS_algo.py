@@ -83,18 +83,18 @@ class MCTS:
             action = random.choice(available_actions)
             if self.constraint_function(current_state | {action}):
                 current_state.add(action)
-                if not self.stable: 
-                    reward_tuple = self.reward_function(current_state, self.metric_weights)
-                    current_reward = reward_tuple[3]
-                    if(current_reward > self.best[1][3]):
-                        self.best[1] = reward_tuple
-                        self.best[0] = current_state
+                # if not self.stable: 
+                #     reward_tuple = self.reward_function(current_state, self.metric_weights)
+                #     current_reward = reward_tuple[3]
+                #     if(current_reward > self.best[1][3]):
+                #         self.best[1] = reward_tuple
+                #         self.best[0] = current_state
 
-                else:
-                    reward = self.reward_function(current_state)
-                    if(reward > self.best[1]):
-                        self.best[1] = reward
-                        self.best[0] = current_state
+                # else:
+                #     reward = self.reward_function(current_state)
+                #     if(reward > self.best[1]):
+                #         self.best[1] = reward
+                #         self.best[0] = current_state
 
             available_actions.remove(action)
 
@@ -127,4 +127,4 @@ class MCTS:
         
         # Return the best edge subset found
         best_node = root.best_child(0)  # Set exploration weight to 0 for exploitation
-        return self.best
+        return best_node

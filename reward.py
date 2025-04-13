@@ -111,7 +111,7 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
     return numerator / denominator
 
 def explanation_reward (selected_edges: torch.Tensor,
-                        metric_weights: Dict[str, float],
+                        metric_weights: Dict[str, float] = config.metric_weights,
                         fidelity_weights: Dict[str, float] = {'plus': 0.5, 'minus': 0.5},
     ) -> float:
     """

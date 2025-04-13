@@ -38,7 +38,8 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 5, 'fidelity': 1}
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 5}
+config.metric_weights = metric_weights
 
 for query_name, query_graph in config.query_graphs.items():
 

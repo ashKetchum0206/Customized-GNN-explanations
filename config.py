@@ -11,4 +11,5 @@ max_edges = 0
 max_score = 0
 alter_graphs = []
 not_allowed = []
+metric_weights = None
 

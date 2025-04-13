@@ -93,7 +93,8 @@ for edge in range(target_edge_list.shape[1]):
 
 target_x = config.node_features[list(unique_nodes)]
 target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
-config.alter_graphs.append(target_graph_data)
+# config.alter_graphs.append(target_graph_data)
+config.alter_graphs.append((best_subset,best_reward[-1]))
 
 
 print('Stage 1 complete.')
@@ -103,13 +104,16 @@ print(f'Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(c
 # Sample random graphs and get their explanations with the same user metrics preference
 for i in tqdm(range(10)):
 
-    k = 0.8
-    sampled_indices = random.sample(range(len(edge_list)), int(0.8*len(edge_list)))
+    k = 0.9
+    sampled_indices = random.sample(range(len(edge_list)), int(k*len(edge_list)))
     config.allowed = sampled_indices
 
     present_state = set()
     best_subset = ()
     best_reward = [0,0,0,0]
+
+    mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
+            constraint, C=10, num_simulations=50, rollout_depth=100)
 
     for _ in range(config.max_edges):
         result = mcts.search(present_state).state
@@ -119,31 +123,31 @@ for i in tqdm(range(10)):
             best_reward = reward
             best_subset = present_state
 
-    # Idea: While calculating the similarity_score, weigh the similarity between those explanations that have better rewards more 
-    target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
-    last_filled = 0 
-    unique_nodes = set()
+    # target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
+    # last_filled = 0 
+    # unique_nodes = set()
 
-    for idx,edge in enumerate(edge_list):
-        if(idx not in best_subset): continue
-        target_edge_list[0][last_filled] = edge[0]
-        target_edge_list[1][last_filled] = edge[1]
-        unique_nodes.add(edge[0])
-        unique_nodes.add(edge[1])
-        last_filled+=1
+    # for idx,edge in enumerate(edge_list):
+    #     if(idx not in best_subset): continue
+    #     target_edge_list[0][last_filled] = edge[0]
+    #     target_edge_list[1][last_filled] = edge[1]
+    #     unique_nodes.add(edge[0])
+    #     unique_nodes.add(edge[1])
+    #     last_filled+=1
     
-    unique_nodes = sorted(list(unique_nodes))
-    mapping = {}
-    for idx, node in enumerate(unique_nodes):
-        mapping[node] = idx
+    # unique_nodes = sorted(list(unique_nodes))
+    # mapping = {}
+    # for idx, node in enumerate(unique_nodes):
+    #     mapping[node] = idx
 
-    for edge in range(target_edge_list.shape[1]):
-        target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-        target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
+    # for edge in range(target_edge_list.shape[1]):
+    #     target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
+    #     target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
 
-    target_x = config.node_features[list(unique_nodes)]
-    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
-    config.alter_graphs.append(target_graph_data)
+    # target_x = config.node_features[list(unique_nodes)]
+    # target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
+    # config.alter_graphs.append(target_graph_data)
+    config.alter_graphs.append((best_subset,best_reward[-1]))
 
 print("Beginning Stage 2..")
 # Run MCTS with updated reward function
@@ -151,6 +155,9 @@ config.allowed = range(len(edge_list))
 present_state = set()
 best_subset = ()
 best_reward = [0,0,0,0]
+
+mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
+            constraint, C=10, num_simulations=50, rollout_depth=100)
 
 for _ in tqdm(range(config.max_edges)):
     result = mcts.search(present_state).state
@@ -191,7 +198,6 @@ print(f'Stability:{best_reward[0]}, Interpret:{reward_tuple[1]}, Fidelity:{rewar
 # Print results
 print("Best edge indices:", best_subset)
 print("Selected edges:", [edge_list[i] for i in best_subset])
-
 
 ''' Visualize Results '''
 # Create full graph (but convert tensor attributes to simple values)

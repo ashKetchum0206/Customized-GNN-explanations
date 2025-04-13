@@ -15,44 +15,46 @@ from torch.nn import CosineSimilarity
 
 def similarity(graph1, graph2):
     
-    embed1 = torch.mean(config.model(data=graph1, return_embeddings = True), dim = 0).unsqueeze(0)
-    embed2 = torch.mean(config.model(data=graph2, return_embeddings = True), dim = 0).unsqueeze(0)
-    return F.cosine_similarity(embed1, embed2).item()
+    # embed1 = torch.mean(config.model(data=graph1, return_embeddings = True), dim = 0).unsqueeze(0)
+    # embed2 = torch.mean(config.model(data=graph2, return_embeddings = True), dim = 0).unsqueeze(0)
+    # return F.cosine_similarity(embed1, embed2).item()
+    return len(graph1 & graph2)/len(graph1 | graph2)
+
 
 def similarity_score(selected_edges):
 
     alter_graphs = config.alter_graphs
-    edge_list = config.edge_list
+    # edge_list = config.edge_list
     score = 0 
 
-    target_edge_list = torch.zeros(2,len(selected_edges), dtype = torch.long)
-    last_filled = 0 
-    unique_nodes = set()
+    # target_edge_list = torch.zeros(2,len(selected_edges), dtype = torch.long)
+    # last_filled = 0 
+    # unique_nodes = set()
 
-    for idx,edge in enumerate(edge_list):
-        if(idx not in selected_edges): continue
-        target_edge_list[0][last_filled] = edge[0]
-        target_edge_list[1][last_filled] = edge[1]
-        unique_nodes.add(edge[0])
-        unique_nodes.add(edge[1])
-        last_filled+=1
+    # for idx,edge in enumerate(edge_list):
+    #     if(idx not in selected_edges): continue
+    #     target_edge_list[0][last_filled] = edge[0]
+    #     target_edge_list[1][last_filled] = edge[1]
+    #     unique_nodes.add(edge[0])
+    #     unique_nodes.add(edge[1])
+    #     last_filled+=1
     
-    unique_nodes = sorted(list(unique_nodes))
-    mapping = {}
-    for idx, node in enumerate(unique_nodes):
-        mapping[node] = idx
+    # unique_nodes = sorted(list(unique_nodes))
+    # mapping = {}
+    # for idx, node in enumerate(unique_nodes):
+    #     mapping[node] = idx
 
-    for edge in range(target_edge_list.shape[1]):
-        target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-        target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
+    # for edge in range(target_edge_list.shape[1]):
+    #     target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
+    #     target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
 
-    target_x = config.node_features[list(unique_nodes)]
-    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(selected_edges)])
+    # target_x = config.node_features[list(unique_nodes)]
+    # target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(selected_edges)])
 
     for alter_graph in alter_graphs:
-        score += similarity(target_graph_data, alter_graph)
+        score += alter_graph[1] * similarity(selected_edges, alter_graph[0])
 
-    return [score/len(config.alter_graphs)]
+    return [score]
 
 def compute_interpretability(selected_edges: torch.Tensor) -> float:
     """

@@ -75,6 +75,7 @@ class MCTS:
         """Simulate a rollout from the given state using a random policy while respecting constraints."""
         current_state = set(node.state)
         available_actions = [edge for edge in range(len(self.edge_list)) if edge not in current_state]
+        best_reward = 0
 
         for _ in range(self.rollout_depth):
             if not available_actions:
@@ -82,7 +83,10 @@ class MCTS:
             
             action = random.choice(available_actions)
             if self.constraint_function(current_state | {action}):
+
                 current_state.add(action)
+                best_reward = max(best_reward, self.reward_function(current_state, self.metric_weights)[-1])
+
                 # if not self.stable: 
                 #     reward_tuple = self.reward_function(current_state, self.metric_weights)
                 #     current_reward = reward_tuple[3]
@@ -100,13 +104,7 @@ class MCTS:
 
         # print(len(current_state))
 
-        if not self.stable:
-            reward_tuple = self.reward_function(current_state, self.metric_weights)
-            return reward_tuple[0] + reward_tuple[1] + reward_tuple[2]
-        
-        else:
-            reward = self.reward_function(current_state)
-            return reward
+        return best_reward
 
     def backpropagate(self, node, reward):
         """Backpropagate reward to update value estimates."""

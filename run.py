@@ -4,29 +4,46 @@ import config
 from torch_geometric.data import Data
 from reward import explanation_reward, similarity_score
 from constraint import constraint
-from model import GCN_2l
+from model import GCN_2l, GIN
 import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 from MCTS_algo import MCTS
-from utils import to_networkx_graph, mutag_dataset
+from utils import to_networkx_graph, mutag_dataset, ba2motif_dataset
 from subgraph_matching import subgraph_score
 from networkx.algorithms.isomorphism import GraphMatcher
 from tqdm import tqdm
 import torch.nn.functional as F
 
+dataset = ba2motif_dataset
 
-# Load the pre-trained model
+'''
+# Load the pre-trained model for MUTAG
 main_model = GCN_2l()
-main_model.load_state_dict(torch.load('GCN_model.pth', map_location=torch.device('cpu'), weights_only=True))
+main_model.load_state_dict(torch.load('models/GCN_model.pth', map_location=torch.device('cpu'), weights_only=True))
 
 # Define which graph from MUTAG to analyze
 graph_index = 57  # You can change this to analyze different molecules
+print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
 
 # Extract data from the selected graph
-x = mutag_dataset[graph_index].x
-edge_index = mutag_dataset[graph_index].edge_index
-# edge_attr = mutag_dataset[graph_index].edge_attr
+x = dataset[graph_index].x
+edge_index = dataset[graph_index].edge_index
+# edge_attr = dataset[graph_index].edge_attr
+'''
+
+# Load the pre-trained GIN model for BA2Motif
+main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
+main_model.load_state_dict(torch.load('models/GIN_model_BA.pth', map_location=torch.device('cpu'), weights_only=True))
+
+# Define which graph from BA2Motif to analyze
+graph_index = 42  # You can change this to analyze different graphs
+print(f"Analyzing graph {graph_index} from BA2Motif dataset (Class: {dataset[graph_index].y.item()})...")
+
+# Extract data from the selected graph
+x = dataset[graph_index].x
+edge_index = dataset[graph_index].edge_index
+
 edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
 # Create edge_list from edge_index
 edge_list = []
@@ -38,13 +55,13 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 5}
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
 config.metric_weights = metric_weights
 
 for query_name, query_graph in config.query_graphs.items():
 
     matcher = GraphMatcher(
-        to_networkx_graph(mutag_dataset[graph_index]),
+        to_networkx_graph(dataset[graph_index]),
         query_graph,
         node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
         # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
@@ -55,7 +72,6 @@ for query_name, query_graph in config.query_graphs.items():
 # Initialize and run MCTS
 config.max_edges = 12
 config.allowed = range(len(edge_list))
-print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
             constraint, C=10, num_simulations=50, rollout_depth=100)
@@ -202,7 +218,7 @@ print("Selected edges:", [edge_list[i] for i in best_subset])
 
 ''' Visualize Results '''
 # Create full graph (but convert tensor attributes to simple values)
-data = mutag_dataset[graph_index]
+data = dataset[graph_index]
 G = nx.Graph()
 
 # Add nodes with simplified attributes
@@ -244,5 +260,5 @@ plt.title("Explanation Subgraph")
 nx.draw(explanation_graph, pos=pos, with_labels=True, node_color='lightgreen')
 
 plt.tight_layout()
-plt.savefig(f"explanation_graph_{graph_index}.png")
+plt.savefig(f"explanations/explanation_graph_{graph_index}.png")
 print(f"Visualization saved as explanation_graph_{graph_index}.png")

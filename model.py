@@ -54,7 +54,7 @@ class GCN_2l(nn.Module):
         x = self.dropout(x)
         x = self.ffn(x)
 
-        return x
+        return F.softmax(x, dim=1)  # Convert logits to probabilities
     
 
 # Define GIN model
@@ -66,9 +66,21 @@ class GIN(torch.nn.Module):
         self.conv3 = GINConv(Sequential(Linear(hidden_dim, hidden_dim), ReLU(), Linear(hidden_dim, hidden_dim)))
         self.lin = Linear(hidden_dim, output_dim)
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x=None, edge_index=None, edge_attr=None, batch=None, data=None):
+        # Handling data input if provided
+        if data is not None:
+            x, edge_index = data.x, data.edge_index
+
+        # Handle batch if not provided
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+
         x = F.relu(self.conv1(x, edge_index))
         x = F.relu(self.conv2(x, edge_index))
         x = F.relu(self.conv3(x, edge_index))
         x = global_add_pool(x, batch)  # Graph-level pooling
-        return self.lin(x).squeeze(1)
+
+        logit = self.lin(x)
+
+        return torch.cat([1-torch.sigmoid(logit), torch.sigmoid(logit)], dim=1)
+        

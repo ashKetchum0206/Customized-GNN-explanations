@@ -12,4 +12,4 @@ max_score = 0
 alter_graphs = []
 not_allowed = []
 metric_weights = None
-
+interpret_norm = 1

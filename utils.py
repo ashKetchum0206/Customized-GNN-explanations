@@ -80,7 +80,6 @@ def convert_to_undirected(dataset):
 # Load the MUTAG dataset
 mutag_dataset = torch.load('datasets/mutag_modified.pt', weights_only=False)
 
-'''
 def create_submolecule(atom_indices, parent_graph_idx):
     """
     Create a submolecule from a subset of atoms in a parent molecule
@@ -157,7 +156,6 @@ config.query_graphs = {
     "aromatic_amine": create_submolecule([10,9,3], 48),  # Oxy-amine
     "cyclic_butyl": create_submolecule(list(range(14,20)), 51),  # Cyclic Butyl on Benzene
 }
-'''
 
 # Load the BA2Motif dataset
 ba2motif_dataset = torch.load('datasets/ba2motif.pt', weights_only=False)
@@ -226,8 +224,10 @@ def create_submotif(motif_type):
     # Convert to NetworkX graph
     return to_networkx_graph(submotif)
 
+'''
 # Add the motifs to config
 config.query_graphs = {
     "house": create_submotif("house"),  # House-shaped motif (class 0)
     "cycle": create_submotif("cycle")   # 5-cycle motif (class 1)
 }
+'''

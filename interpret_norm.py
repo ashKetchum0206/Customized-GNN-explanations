@@ -14,16 +14,17 @@ from torch_geometric.data import Data
 
 import config
 from utils import to_networkx_graph, ba2motif_dataset, mutag_dataset
+from reward import compute_fidelity
 
 # Configuration
 NUM_SAMPLES = 100  # Number of random subgraphs to generate for each size
 MAX_SIZE = 12  # Maximum subgraph size (number of edges)
 DATASET = "MUTAG"  # "MUTAG" or "BA2Motif"
-GRAPH_INDEX = 178 # Index of the graph to analyze
+GRAPH_INDEX = 3 # Index of the graph to analyze
 
 # Set the dataset
 dataset = ba2motif_dataset if DATASET == "BA2Motif" else mutag_dataset
-print(f"Analyzing graph {GRAPH_INDEX} from {DATASET} dataset...")
+# print(f"Analyzing graph {GRAPH_INDEX} from {DATASET} dataset...")
 
 # Load the graph
 data = dataset[GRAPH_INDEX]
@@ -178,11 +179,12 @@ def compute_subgraph_matches(selected_edges):
 # Generate and analyze random subgraphs
 size_results = defaultdict(list)
 all_results = []
+all_results_fid = []
 
-print(f"Generating {NUM_SAMPLES} random connected subgraphs for each size 1-{MAX_SIZE}...")
+# print(f"Generating {NUM_SAMPLES} random connected subgraphs for each size 1-{MAX_SIZE}...")
 for size in range(1, MAX_SIZE + 1):
-    print(f"Processing size {size}:")
-    for _ in tqdm(range(NUM_SAMPLES)):
+    # print(f"Processing size {size}:")
+    for _ in range(NUM_SAMPLES):
         # Generate random connected subgraph
         subgraph_edges = generate_connected_random_subgraph(full_graph, edge_list, size)
         
@@ -192,31 +194,36 @@ for size in range(1, MAX_SIZE + 1):
         # Record results
         size_results[size].append(matches)
         all_results.append((size, matches))
+        all_results_fid.append(compute_fidelity(subgraph_edges,{'plus': 0.5, 'minus': 0.5}))
 
 # Analyze results by size
-print("\nResults by subgraph size:")
-print(f"{'Size':>4} | {'Min':>5} | {'Max':>5} | {'Mean':>8} | {'Std Dev':>8} | {'Matches/Edge':>12}")
-print("-" * 55)
+# print("\nResults by subgraph size:")
+# print(f"{'Size':>4} | {'Min':>5} | {'Max':>5} | {'Mean':>8} | {'Std Dev':>8} | {'Matches/Edge':>12}")
+# print("-" * 55)
 
-for size in range(1, MAX_SIZE + 1):
-    if not size_results[size]:
-        continue
+# for size in range(1, MAX_SIZE + 1):
+#     if not size_results[size]:
+#         continue
         
-    matches = size_results[size]
-    min_val = min(matches)
-    max_val = max(matches)
-    mean_val = np.mean(matches)
-    std_val = np.std(matches)
-    density = mean_val / size  # Matches per edge
+#     matches = size_results[size]
+#     min_val = min(matches)
+#     max_val = max(matches)
+#     mean_val = np.mean(matches)
+#     std_val = np.std(matches)
+#     density = mean_val / size  # Matches per edge
     
-    print(f"{size:4d} | {min_val:5d} | {max_val:5d} | {mean_val:8.2f} | {std_val:8.2f} | {density:12.2f}")
+#     print(f"{size:4d} | {min_val:5d} | {max_val:5d} | {mean_val:8.2f} | {std_val:8.2f} | {density:12.2f}")
 
 # Calculate overall statistics
 all_matches = [m for _, m in all_results]
 overall_mean = np.mean(all_matches)
 overall_std = np.std(all_matches)
 
-print("\nOverall statistics:")
-print(f"Mean: {overall_mean:.2f}")
-print(f"Std Dev: {overall_std:.2f}")
-print(f"Mean + Std: {overall_mean + overall_std:.2f}")
+# print("\nOverall statistics:")
+# print(f"Mean: {overall_mean:.2f}")
+# print(f"Std Dev: {overall_std:.2f}")
+# print(f"Mean + Std: {overall_mean + overall_std:.2f}")
+config.interpret_mean = overall_mean 
+config.interpret_std = overall_std
+config.fidelity_mean = np.mean(all_results_fid)
+config.fidelity_std = np.std(all_results_fid)

@@ -50,7 +50,7 @@ def subgraph_score(selected_edges):
 
         score += len(list(matcher.subgraph_isomorphisms_iter()))
 
-    return score/config.max_score
+    return score
 
 
 

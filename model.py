@@ -59,12 +59,13 @@ class GCN_2l(nn.Module):
 
 # Define GIN model
 class GIN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim=300, output_dim=1):
+    def __init__(self, input_dim, hidden_dim=300, output_dim=1,multi=False):
         super(GIN, self).__init__()
         self.conv1 = GINConv(Sequential(Linear(input_dim, hidden_dim), ReLU(), Linear(hidden_dim, hidden_dim)))
         self.conv2 = GINConv(Sequential(Linear(hidden_dim, hidden_dim), ReLU(), Linear(hidden_dim, hidden_dim)))
         self.conv3 = GINConv(Sequential(Linear(hidden_dim, hidden_dim), ReLU(), Linear(hidden_dim, hidden_dim)))
         self.lin = Linear(hidden_dim, output_dim)
+        self.multi = multi
 
     def forward(self, x=None, edge_index=None, edge_attr=None, batch=None, data=None):
         # Handling data input if provided
@@ -82,5 +83,8 @@ class GIN(torch.nn.Module):
 
         logit = self.lin(x)
 
-        return torch.cat([1-torch.sigmoid(logit), torch.sigmoid(logit)], dim=1)
+        if not self.multi: return torch.cat([1-torch.sigmoid(logit), torch.sigmoid(logit)], dim=1)
+        
+        return F.softmax(logit, dim = 1)
+
         

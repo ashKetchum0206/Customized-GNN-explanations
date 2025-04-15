@@ -15,36 +15,33 @@ from networkx.algorithms.isomorphism import GraphMatcher
 from tqdm import tqdm
 import torch.nn.functional as F
 
-dataset = ba2motif_dataset
-
-'''
-# Load the pre-trained model for MUTAG
-main_model = GCN_2l()
-main_model.load_state_dict(torch.load('models/GCN_model.pth', map_location=torch.device('cpu'), weights_only=True))
+dataset = mutag_dataset
 
 # Define which graph from MUTAG to analyze
-graph_index = 57  # You can change this to analyze different molecules
+graph_index = 3  # You can change this to analyze different molecules
 print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
 
 # Extract data from the selected graph
 x = dataset[graph_index].x
 edge_index = dataset[graph_index].edge_index
-# edge_attr = dataset[graph_index].edge_attr
-'''
+main_model = GIN(input_dim = x.shape[1], output_dim = 2, multi=True)
+main_model.load_state_dict(torch.load('models/GIN_model_MUTAG.pth', map_location=torch.device('cpu'), weights_only=True))
+edge_attr = dataset[graph_index].edge_attr
 
-# Load the pre-trained GIN model for BA2Motif
-main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
-main_model.load_state_dict(torch.load('models/GIN_model_BA.pth', map_location=torch.device('cpu'), weights_only=True))
 
-# Define which graph from BA2Motif to analyze
-graph_index = 42  # You can change this to analyze different graphs
-print(f"Analyzing graph {graph_index} from BA2Motif dataset (Class: {dataset[graph_index].y.item()})...")
+# # Load the pre-trained GIN model for BA2Motif
+# main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
+# main_model.load_state_dict(torch.load('models/GIN_model_BA.pth', map_location=torch.device('cpu'), weights_only=True))
 
-# Extract data from the selected graph
-x = dataset[graph_index].x
-edge_index = dataset[graph_index].edge_index
+# # Define which graph from BA2Motif to analyze
+# graph_index = 42  # You can change this to analyze different graphs
+# print(f"Analyzing graph {graph_index} from BA2Motif dataset (Class: {dataset[graph_index].y.item()})...")
 
-edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
+# # Extract data from the selected graph
+# x = dataset[graph_index].x
+# edge_index = dataset[graph_index].edge_index
+
+# edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
 # Create edge_list from edge_index
 edge_list = []
 for i in range(edge_index.size(1)):
@@ -55,28 +52,33 @@ for i in range(edge_index.size(1)):
 config.edge_attr = edge_attr
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
+metric_weights = {'sparse': 1, 'interpret': 10, 'fidelity': 1}
 config.metric_weights = metric_weights
 
-for query_name, query_graph in config.query_graphs.items():
+# for query_name, query_graph in config.query_graphs.items():
 
-    matcher = GraphMatcher(
-        to_networkx_graph(dataset[graph_index]),
-        query_graph,
-        node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
-        # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
-    )
+#     matcher = GraphMatcher(
+#         to_networkx_graph(dataset[graph_index]),
+#         query_graph,
+#         node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
+#         # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
+#     )
 
-    config.max_score += len(list(matcher.subgraph_isomorphisms_iter()))
+#     config.max_score += len(list(matcher.subgraph_isomorphisms_iter()))
 
 # Initialize and run MCTS
-config.max_edges = 12
+config.max_edges = 10
 config.allowed = range(len(edge_list))
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
             constraint, C=10, num_simulations=50, rollout_depth=100)
+
+exec(open("interpret_norm.py").read(), globals())
+
+print(f'Prediction probability:{config.original_prob}')
+
 present_state = set()
-best_subset = ()
+best_subset = set()
 best_reward = [0,0,0,0]
 
 for _ in range(config.max_edges):
@@ -126,19 +128,22 @@ for i in tqdm(range(10)):
     config.allowed = sampled_indices
 
     present_state = set()
-    best_subset = ()
+    best_subset = set()
     best_reward = [0,0,0,0]
 
     mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
             constraint, C=10, num_simulations=50, rollout_depth=100)
 
     for _ in range(config.max_edges):
-        result = mcts.search(present_state).state
-        present_state = result
-        reward = explanation_reward(present_state, metric_weights)
-        if(reward[-1] >= best_reward[-1]):
-            best_reward = reward
-            best_subset = present_state
+        try:
+            result = mcts.search(present_state).state
+            present_state = result
+            reward = explanation_reward(present_state, metric_weights)
+            if(reward[-1] >= best_reward[-1]):
+                best_reward = reward
+                best_subset = present_state
+        except:
+            break
 
     # target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
     # last_filled = 0 
@@ -166,11 +171,12 @@ for i in tqdm(range(10)):
     # config.alter_graphs.append(target_graph_data)
     config.alter_graphs.append((best_subset,best_reward[-1]))
 
+print(f'{len(config.alter_graphs)} smoothening graphs')
 print("Beginning Stage 2..")
 # Run MCTS with updated reward function
 config.allowed = range(len(edge_list))
 present_state = set()
-best_subset = ()
+best_subset = set()
 best_reward = [0,0,0,0]
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 

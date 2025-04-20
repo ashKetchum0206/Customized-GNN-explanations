@@ -20,7 +20,7 @@ from reward import compute_fidelity
 NUM_SAMPLES = 100  # Number of random subgraphs to generate for each size
 MAX_SIZE = 12  # Maximum subgraph size (number of edges)
 DATASET = "MUTAG"  # "MUTAG" or "BA2Motif"
-GRAPH_INDEX = 3 # Index of the graph to analyze
+GRAPH_INDEX = config.graph_index # Index of the graph to analyze
 
 # Set the dataset
 dataset = ba2motif_dataset if DATASET == "BA2Motif" else mutag_dataset
@@ -194,7 +194,7 @@ for size in range(1, MAX_SIZE + 1):
         # Record results
         size_results[size].append(matches)
         all_results.append((size, matches))
-        all_results_fid.append(compute_fidelity(subgraph_edges,{'plus': 0.5, 'minus': 0.5}))
+        all_results_fid.append(compute_fidelity(subgraph_edges,config.fidelity_weights))
 
 # Analyze results by size
 # print("\nResults by subgraph size:")

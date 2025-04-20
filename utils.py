@@ -79,6 +79,7 @@ def convert_to_undirected(dataset):
 
 # Load the MUTAG dataset
 mutag_dataset = torch.load('datasets/mutag_modified.pt', weights_only=False)
+# mutag_dataset = torch.load('/kaggle/input/mcts-code/MCTS/datasets/mutag_modified.pt', weights_only=False)
 
 def create_submolecule(atom_indices, parent_graph_idx):
     """

@@ -17,3 +17,5 @@ interpret_std = 0
 fidelity_mean = 0
 fidelity_std = 0
 interpret_norm = 1
+fidelity_weights = None
+graph_index = 0

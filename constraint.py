@@ -1,7 +1,7 @@
 from collections import defaultdict
 import config 
 
-def constraint(selected_edges):
+def constraint(selected_edges,log=False):
 
     for edge in selected_edges:
         if edge not in config.allowed: return False
@@ -32,4 +32,6 @@ def constraint(selected_edges):
     
     dfs(start_node)  # Start traversal
     # Step 3: Check if all nodes in the selected edges are visited
+    if log:
+        print(visited, nodes)
     return visited == nodes and len(selected_edges) <= config.max_edges

@@ -17,17 +17,13 @@ import torch.nn.functional as F
 
 dataset = mutag_dataset
 
-# Define which graph from MUTAG to analyze
-graph_index = 3  # You can change this to analyze different molecules
-print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
-
-# Extract data from the selected graph
-x = dataset[graph_index].x
-edge_index = dataset[graph_index].edge_index
+# Define metric weights
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
+config.metric_weights = metric_weights
+fidelity_weights = {'plus': 0.3, 'minus': 0.7}
+config.fidelity_weights = fidelity_weights
 main_model = GIN(input_dim = x.shape[1], output_dim = 2, multi=True)
 main_model.load_state_dict(torch.load('models/GIN_model_MUTAG.pth', map_location=torch.device('cpu'), weights_only=True))
-edge_attr = dataset[graph_index].edge_attr
-
 
 # # Load the pre-trained GIN model for BA2Motif
 # main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
@@ -43,7 +39,19 @@ edge_attr = dataset[graph_index].edge_attr
 
 # edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float)
 # Create edge_list from edge_index
+
+
+# Define which graph from MUTAG to analyze
+config.graph_index = 10  # You can change this to analyze different molecules
+graph_index = config.graph_index
+# print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
+
+# Extract data from the selected graph
+x = dataset[graph_index].x
+edge_index = dataset[graph_index].edge_index
+edge_attr = dataset[graph_index].edge_attr
 edge_list = []
+
 for i in range(edge_index.size(1)):
     src, dst = edge_index[0, i].item(), edge_index[1, i].item()
     edge_list.append((src, dst))
@@ -51,23 +59,9 @@ for i in range(edge_index.size(1)):
 # Set edge_attr in config (needed by reward function)
 config.edge_attr = edge_attr
 
-# Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 10, 'fidelity': 1}
-config.metric_weights = metric_weights
-
-# for query_name, query_graph in config.query_graphs.items():
-
-#     matcher = GraphMatcher(
-#         to_networkx_graph(dataset[graph_index]),
-#         query_graph,
-#         node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
-#         # edge_match=lambda e1, e2: torch.allclose(e1.get('weight', torch.tensor(1.0)), e2.get('weight', torch.tensor(1.0)))
-#     )
-
-#     config.max_score += len(list(matcher.subgraph_isomorphisms_iter()))
 
 # Initialize and run MCTS
-config.max_edges = 10
+config.max_edges = 12
 config.allowed = range(len(edge_list))
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
@@ -115,15 +109,13 @@ target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=conf
 # config.alter_graphs.append(target_graph_data)
 config.alter_graphs.append((best_subset,best_reward[-1]))
 
-
 print('Stage 1 complete.')
 print(f'Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
-
 
 # Sample random graphs and get their explanations with the same user metrics preference
 for i in tqdm(range(10)):
 
-    k = 0.9
+    k = 0.8
     sampled_indices = random.sample(range(len(edge_list)), int(k*len(edge_list)))
     config.allowed = sampled_indices
 
@@ -145,30 +137,6 @@ for i in tqdm(range(10)):
         except:
             break
 
-    # target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
-    # last_filled = 0 
-    # unique_nodes = set()
-
-    # for idx,edge in enumerate(edge_list):
-    #     if(idx not in best_subset): continue
-    #     target_edge_list[0][last_filled] = edge[0]
-    #     target_edge_list[1][last_filled] = edge[1]
-    #     unique_nodes.add(edge[0])
-    #     unique_nodes.add(edge[1])
-    #     last_filled+=1
-    
-    # unique_nodes = sorted(list(unique_nodes))
-    # mapping = {}
-    # for idx, node in enumerate(unique_nodes):
-    #     mapping[node] = idx
-
-    # for edge in range(target_edge_list.shape[1]):
-    #     target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-    #     target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
-
-    # target_x = config.node_features[list(unique_nodes)]
-    # target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
-    # config.alter_graphs.append(target_graph_data)
     config.alter_graphs.append((best_subset,best_reward[-1]))
 
 print(f'{len(config.alter_graphs)} smoothening graphs')
@@ -179,7 +147,7 @@ present_state = set()
 best_subset = set()
 best_reward = [0,0,0,0]
 
-mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
+mcts = MCTS(main_model, x, edge_list, edge_index, similarity_score, metric_weights, 
             constraint, C=10, num_simulations=50, rollout_depth=100)
 
 for _ in tqdm(range(config.max_edges)):
@@ -190,6 +158,7 @@ for _ in tqdm(range(config.max_edges)):
         best_reward = reward
         best_subset = present_state
 
+# constraint(best_subset,log=True)
 target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
 last_filled = 0 
 unique_nodes = set()
@@ -220,7 +189,12 @@ print(f'Stability:{best_reward[0]}, Interpret:{reward_tuple[1]}, Fidelity:{rewar
 
 # Print results
 print("Best edge indices:", best_subset)
-print("Selected edges:", [edge_list[i] for i in best_subset])
+# print("Selected edges:", [edge_list[i] for i in best_subset])
+
+
+
+
+
 
 ''' Visualize Results '''
 # Create full graph (but convert tensor attributes to simple values)
@@ -268,3 +242,6 @@ nx.draw(explanation_graph, pos=pos, with_labels=True, node_color='lightgreen')
 plt.tight_layout()
 plt.savefig(f"explanations/explanation_graph_{graph_index}.png")
 print(f"Visualization saved as explanation_graph_{graph_index}.png")
+
+
+# Hyperparameters to test - C(exploration parameter) for both the stages, num_simulations for the first stage, num_simulations for the second stage, reward scaling in the stability function, number of smoothening graphs

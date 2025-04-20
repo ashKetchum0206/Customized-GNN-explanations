@@ -21,7 +21,7 @@ def similarity(graph1, graph2):
     return len(graph1 & graph2)/len(graph1 | graph2)
 
 
-def similarity_score(selected_edges):
+def similarity_score(selected_edges,metric_weights=None):
 
     alter_graphs = config.alter_graphs
     # edge_list = config.edge_list
@@ -105,14 +105,14 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
 
     # Characterization formula
     numerator = fidelity_weights['plus'] + fidelity_weights['minus']
-    denominator = (fidelity_weights['plus'] / fidelity_plus) + \
-                  (fidelity_weights['minus'] / (1 - fidelity_minus))
+    denominator = (fidelity_weights['plus'] / (fidelity_plus + 1e-2)) + \
+                  (fidelity_weights['minus'] / (1 - fidelity_minus + 1e-2))
     
     return numerator / denominator
 
 def explanation_reward (selected_edges: torch.Tensor,
                         metric_weights: Dict[str, float] = config.metric_weights,
-                        fidelity_weights: Dict[str, float] = {'plus': 0.5, 'minus': 0.5},
+                        fidelity_weights: Dict[str, float] = {'plus': 0.7, 'minus': 0.3},
     ) -> float:
     """
     Calculate combined reward score for explanation subgraph
@@ -146,7 +146,7 @@ def explanation_reward (selected_edges: torch.Tensor,
     # Calculate metric components
     interpret = compute_interpretability(selected_edges)
     sparsity = compute_sparsity(selected_edges)
-    fidelity = compute_fidelity(selected_edges, fidelity_weights)
+    fidelity = compute_fidelity(selected_edges, config.fidelity_weights)
 
     # Normalize metrics
     interpret_norm = (interpret - config.interpret_mean)/config.interpret_std

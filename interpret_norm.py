@@ -2,6 +2,7 @@
 Analyze random subgraphs for interpretability normalization
 Generates random connected subgraphs of different sizes and evaluates motif matching
 """
+
 import random
 import torch
 import numpy as np
@@ -155,8 +156,8 @@ def compute_subgraph_matches(selected_edges):
     target_x = x[list(unique_nodes)]
     target_graph_data = Data(
         x=target_x, 
-        edge_index=target_edge_list, 
-        edge_attr=edge_attr[list(selected_edges)] if hasattr(data, 'edge_attr') else None
+        edge_index=target_edge_list
+        # edge_attr=edge_attr[list(selected_edges)] if hasattr(data, 'edge_attr') else None
     )
     target_graph = to_networkx_graph(target_graph_data)
 

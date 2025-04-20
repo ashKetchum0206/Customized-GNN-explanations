@@ -96,8 +96,8 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
     mask[list(selected_edges)] = True
     
     with torch.no_grad():
-        subgraph_pred = config.model(config.node_features, config.edge_index[:, mask], config.edge_attr[mask])[0,config.original_pred].item()
-        complement_pred = config.model(config.node_features, config.edge_index[:, ~mask], config.edge_attr[~mask])[0,config.original_pred].item()
+        subgraph_pred = config.model(config.node_features, config.edge_index[:, mask])[0,config.original_pred].item()
+        complement_pred = config.model(config.node_features, config.edge_index[:, ~mask])[0,config.original_pred].item()
 
     # Calculate fidelity components
     fidelity_plus = abs(config.original_prob - complement_pred)

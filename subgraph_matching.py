@@ -35,7 +35,7 @@ def subgraph_score(selected_edges):
         target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
 
     target_x = config.node_features[list(unique_nodes)]
-    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(selected_edges)])
+    target_graph_data = Data(x=target_x, edge_index=target_edge_list)
     target_graph = to_networkx_graph(target_graph_data)
 
 

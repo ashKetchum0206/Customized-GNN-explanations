@@ -225,10 +225,9 @@ def create_submotif(motif_type):
     # Convert to NetworkX graph
     return to_networkx_graph(submotif)
 
-'''
-# Add the motifs to config
-config.query_graphs = {
-    "house": create_submotif("house"),  # House-shaped motif (class 0)
-    "cycle": create_submotif("cycle")   # 5-cycle motif (class 1)
-}
-'''
+
+# # Add the motifs to config
+# config.query_graphs = {
+#     "house": create_submotif("house"),  # House-shaped motif (class 0)
+#     "cycle": create_submotif("cycle")   # 5-cycle motif (class 1)
+# }

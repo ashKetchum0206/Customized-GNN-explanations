@@ -14,16 +14,24 @@ from subgraph_matching import subgraph_score
 from networkx.algorithms.isomorphism import GraphMatcher
 from tqdm import tqdm
 import torch.nn.functional as F
+from utils import to_pyg_data
+from VGAE_pyG.model import DeepVGAE
 
 dataset = mutag_dataset
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+enc_in_channels = 7
+enc_hidden_channels = 64
+enc_out_channels = 32
+vgae_model = DeepVGAE(enc_in_channels, enc_hidden_channels, enc_out_channels).to(device)
+# model.load_state_dict(torch.load('VGAE_pyG/VGAE_model.pt'))
+vgae_model.to(device)
+config.vgae_model = vgae_model
 
 # Define metric weights
 metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
 config.metric_weights = metric_weights
-fidelity_weights = {'plus': 0.3, 'minus': 0.7}
-config.fidelity_weights = fidelity_weights
-main_model = GIN(input_dim = x.shape[1], output_dim = 2, multi=True)
-main_model.load_state_dict(torch.load('models/GIN_model_MUTAG.pth', map_location=torch.device('cpu'), weights_only=True))
+config.sim_index = "common_edges"
 
 # # Load the pre-trained GIN model for BA2Motif
 # main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
@@ -42,15 +50,20 @@ main_model.load_state_dict(torch.load('models/GIN_model_MUTAG.pth', map_location
 
 
 # Define which graph from MUTAG to analyze
-config.graph_index = 10  # You can change this to analyze different molecules
+config.graph_index = 32  # You can change this to analyze different molecules
 graph_index = config.graph_index
-# print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
+print(f"Analyzing molecule {graph_index} from MUTAG dataset..")
 
 # Extract data from the selected graph
 x = dataset[graph_index].x
 edge_index = dataset[graph_index].edge_index
 edge_attr = dataset[graph_index].edge_attr
 edge_list = []
+
+fidelity_weights = {'plus': 0.7, 'minus': 0.3}
+config.fidelity_weights = fidelity_weights
+main_model = GIN(input_dim = x.shape[1], output_dim = 2, multi=True)
+main_model.load_state_dict(torch.load('models/GIN_model_MUTAG.pth', map_location=torch.device('cpu'), weights_only=True))
 
 for i in range(edge_index.size(1)):
     src, dst = edge_index[0, i].item(), edge_index[1, i].item()
@@ -61,7 +74,7 @@ config.edge_attr = edge_attr
 
 
 # Initialize and run MCTS
-config.max_edges = 12
+config.max_edges = 10
 config.allowed = range(len(edge_list))
 
 mcts = MCTS(main_model, x, edge_list, edge_index, explanation_reward, metric_weights, 
@@ -83,37 +96,17 @@ for _ in range(config.max_edges):
         best_reward = reward
         best_subset = present_state
 
-target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
-last_filled = 0 
-unique_nodes = set()
+target_graph_data = to_pyg_data(best_subset)
 
-for idx,edge in enumerate(edge_list):
-    if(idx not in best_subset): continue
-    target_edge_list[0][last_filled] = edge[0]
-    target_edge_list[1][last_filled] = edge[1]
-    unique_nodes.add(edge[0])
-    unique_nodes.add(edge[1])
-    last_filled+=1
-
-unique_nodes = sorted(list(unique_nodes))
-mapping = {}
-for idx, node in enumerate(unique_nodes):
-    mapping[node] = idx
-
-for edge in range(target_edge_list.shape[1]):
-    target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-    target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
-
-target_x = config.node_features[list(unique_nodes)]
-target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
-# config.alter_graphs.append(target_graph_data)
+config.alter_graphs_pyg.append(target_graph_data)
 config.alter_graphs.append((best_subset,best_reward[-1]))
+
 
 print('Stage 1 complete.')
 print(f'Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
 
 # Sample random graphs and get their explanations with the same user metrics preference
-for i in tqdm(range(10)):
+for i in tqdm(range(2)):
 
     k = 0.8
     sampled_indices = random.sample(range(len(edge_list)), int(k*len(edge_list)))
@@ -138,6 +131,8 @@ for i in tqdm(range(10)):
             break
 
     config.alter_graphs.append((best_subset,best_reward[-1]))
+    config.alter_graphs_pyg.append(to_pyg_data(best_subset))
+
 
 print(f'{len(config.alter_graphs)} smoothening graphs')
 print("Beginning Stage 2..")
@@ -154,34 +149,12 @@ for _ in tqdm(range(config.max_edges)):
     result = mcts.search(present_state).state
     present_state = result
     reward = similarity_score(present_state)
+    
     if(reward[-1] >= best_reward[-1]):
         best_reward = reward
         best_subset = present_state
 
-# constraint(best_subset,log=True)
-target_edge_list = torch.zeros((2,len(best_subset)), dtype = torch.long)
-last_filled = 0 
-unique_nodes = set()
-
-for idx,edge in enumerate(edge_list):
-    if(idx not in best_subset): continue
-    target_edge_list[0][last_filled] = edge[0]
-    target_edge_list[1][last_filled] = edge[1]
-    unique_nodes.add(edge[0])
-    unique_nodes.add(edge[1])
-    last_filled+=1
-
-unique_nodes = sorted(list(unique_nodes))
-mapping = {}
-for idx, node in enumerate(unique_nodes):
-    mapping[node] = idx
-
-for edge in range(target_edge_list.shape[1]):
-    target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-    target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
-
-target_x = config.node_features[list(unique_nodes)]
-target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(best_subset)])
+target_graph_data = to_pyg_data(best_subset)
 
 reward_tuple = explanation_reward(best_subset, metric_weights)
 print("Stage 2 complete.")
@@ -190,11 +163,6 @@ print(f'Stability:{best_reward[0]}, Interpret:{reward_tuple[1]}, Fidelity:{rewar
 # Print results
 print("Best edge indices:", best_subset)
 # print("Selected edges:", [edge_list[i] for i in best_subset])
-
-
-
-
-
 
 ''' Visualize Results '''
 # Create full graph (but convert tensor attributes to simple values)

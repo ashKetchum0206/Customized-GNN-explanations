@@ -19,3 +19,6 @@ fidelity_std = 0
 interpret_norm = 1
 fidelity_weights = None
 graph_index = 0
+sim_index = None
+alter_graphs_pyg = []
+vgae_model = None

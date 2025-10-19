@@ -1,4 +1,3 @@
-
 import networkx as nx
 import torch
 from tqdm import tqdm
@@ -25,6 +24,31 @@ def to_networkx_graph(graph_data):
 
     return G
 
+def to_pyg_data(selected_edges):
+
+    target_edge_list = torch.zeros(2,len(selected_edges), dtype = torch.long)
+    unique_nodes = set()
+
+    for idx,edge in enumerate(selected_edges):
+
+        target_edge_list[0][idx] = config.edge_index[0, edge]
+        target_edge_list[1][idx] = config.edge_index[1, edge]
+        unique_nodes.add(config.edge_index[0, edge].item())
+        unique_nodes.add(config.edge_index[1, edge].item())
+  
+    
+    unique_nodes = sorted(list(unique_nodes))
+    mapping = {}
+    for idx, node in enumerate(unique_nodes):
+        mapping[node] = idx
+
+    for edge in range(target_edge_list.shape[1]):
+        target_edge_list[0, edge] = mapping[target_edge_list[0, edge].item()]
+        target_edge_list[1, edge] = mapping[target_edge_list[1, edge].item()]
+
+    target_x = config.node_features[list(unique_nodes)]
+    target_graph_data = Data(x=target_x, edge_index=target_edge_list, edge_attr=config.edge_attr[list(selected_edges)])
+    return target_graph_data
 
 # Function to convert to an undirected graph representation
 def convert_to_undirected(dataset):

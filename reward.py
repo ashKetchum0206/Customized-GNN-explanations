@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch.nn import CosineSimilarity
 from VGAE_pyG.VGAE_sim import compare_graphs_greedy_node_matching
 from utils import to_pyg_data
+from gntk_combined import calculate_gntk_similarity
 
 
 def similarity_common_edges(graph1, graph2):
@@ -32,7 +33,7 @@ def similarity_score(selected_edges, metric_weights=None):
         for i in range(len(alter_graphs)):
             score += alter_graphs[i][1] * compare_graphs_greedy_node_matching(config.vgae_model, data1, config.alter_graphs_pyg[i])
 
-    if(config.sim_index == 'kernel'): 
+    elif(config.sim_index == 'kernel'): 
         graphs = [selected_edges]
         for graph,_ in alter_graphs:
             graphs.append(graph)
@@ -44,6 +45,11 @@ def similarity_score(selected_edges, metric_weights=None):
     elif(config.sim_index == 'common_edges'):
         for alter_graph in alter_graphs:
             score += alter_graph[1] * similarity_common_edges(selected_edges, alter_graph[0])
+    
+    elif(config.sim_index == 'gntk'):
+        data1 = to_pyg_data(selected_edges)
+        for i in range(len(alter_graphs)):
+            score += alter_graphs[i][1] * calculate_gntk_similarity(data1, config.alter_graphs_pyg[i])
 
     return [score]
 

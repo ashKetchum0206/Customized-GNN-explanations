@@ -31,7 +31,7 @@ config.vgae_model = vgae_model
 # Define metric weights
 metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
 config.metric_weights = metric_weights
-config.sim_index = "common_edges"
+config.sim_index = "gntk"
 
 # # Load the pre-trained GIN model for BA2Motif
 # main_model = GIN(input_dim=10)  # BA2Motif has 10 node features
@@ -210,6 +210,5 @@ nx.draw(explanation_graph, pos=pos, with_labels=True, node_color='lightgreen')
 plt.tight_layout()
 plt.savefig(f"explanations/explanation_graph_{graph_index}.png")
 print(f"Visualization saved as explanation_graph_{graph_index}.png")
-
 
 # Hyperparameters to test - C(exploration parameter) for both the stages, num_simulations for the first stage, num_simulations for the second stage, reward scaling in the stability function, number of smoothening graphs

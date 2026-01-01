@@ -2,7 +2,6 @@
 Analyze random subgraphs for interpretability normalization
 Generates random connected subgraphs of different sizes and evaluates motif matching
 """
-
 import random
 import torch
 import numpy as np
@@ -30,7 +29,7 @@ data = dataset[GRAPH_INDEX]
 x = data.x
 edge_index = data.edge_index
 edge_attr = torch.ones((edge_index.size(1), 1), dtype=torch.float) if not hasattr(data, 'edge_attr') else data.edge_attr
-MAX_SIZE = int(data.edge_index.shape[1] * 0.7) # Maximum subgraph size (number of edges)
+MAX_SIZE = int(data.edge_index.shape[1] * 0.7)
 
 '''
 # Extract subgraph with nodes 0-5
@@ -69,7 +68,6 @@ for i in range(edge_index.size(1)):
 
 # Convert to NetworkX for easier manipulation
 full_graph = to_networkx_graph(data)
-print(f"Graph has {full_graph.number_of_nodes()} nodes and {full_graph.number_of_edges()} edges")
 
 def generate_connected_random_subgraph(graph, edge_list, size):
     """Generate a random connected subgraph with 'size' edges"""
@@ -124,63 +122,7 @@ def generate_connected_random_subgraph(graph, edge_list, size):
     
     return selected_edges
 
-def compute_subgraph_matches(selected_edges):
-    """Count motif matches in subgraph"""
-    # Create subgraph from selected edges
-    target_edge_list = torch.zeros((2, len(selected_edges)), dtype=torch.long)
-    last_filled = 0
-    unique_nodes = set()
-
-    for idx, edge in enumerate(edge_list):
-        if idx not in selected_edges:
-            continue
-        target_edge_list[0][last_filled] = edge[0]
-        target_edge_list[1][last_filled] = edge[1]
-        unique_nodes.add(edge[0])
-        unique_nodes.add(edge[1])
-        last_filled += 1
-
-    # Skip empty subgraphs
-    if last_filled == 0:
-        return 0
-
-    unique_nodes = sorted(list(unique_nodes))
-    mapping = {node: idx for idx, node in enumerate(unique_nodes)}
-
-    # Remap node indices
-    for edge in range(target_edge_list.shape[1]):
-        target_edge_list[0][edge] = mapping[target_edge_list[0][edge].item()]
-        target_edge_list[1][edge] = mapping[target_edge_list[1][edge].item()]
-
-    target_x = x[list(unique_nodes)]
-    target_graph_data = Data(
-        x=target_x, 
-        edge_index=target_edge_list
-        # edge_attr=edge_attr[list(selected_edges)] if hasattr(data, 'edge_attr') else None
-    )
-    target_graph = to_networkx_graph(target_graph_data)
-
-    # Count matches for all query graph motifs
-    total_matches = 0
-    for query_name, query_graph in config.query_graphs.items():
-        matcher = GraphMatcher(
-            target_graph,
-            query_graph,
-            node_match=lambda n1, n2: torch.all(n1['label'] == n2['label']).item()
-        )
-        
-        # Count isomorphisms
-        matches = len(list(matcher.subgraph_isomorphisms_iter()))
-        # if matches: print(len(selected_edges), matches, query_name)
-        total_matches += matches
-    
-    return total_matches
-
-# Generate and analyze random subgraphs
-size_results = defaultdict(list)
-all_results_inter = []
-all_results_fid = []
-
+all_results_stab = []
 
 # print(f"Generating {NUM_SAMPLES} random connected subgraphs for each size 1-{MAX_SIZE}...")
 for size in range(1, MAX_SIZE + 1):
@@ -188,46 +130,8 @@ for size in range(1, MAX_SIZE + 1):
     for _ in range(NUM_SAMPLES):
         # Generate random connected subgraph
         subgraph_edges = generate_connected_random_subgraph(full_graph, edge_list, size)
-        
-        # Count motif matches
-        matches = compute_subgraph_matches(subgraph_edges)
-        
-        # Record results
-        size_results[size].append(matches)
-        all_results_inter.append((size, matches))
-        all_results_fid.append(compute_fidelity(subgraph_edges, config.fidelity_weights))
+        all_results_stab.append(similarity_score(subgraph_edges))
 
-
-# Analyze results by size
-# print("\nResults by subgraph size:")
-# print(f"{'Size':>4} | {'Min':>5} | {'Max':>5} | {'Mean':>8} | {'Std Dev':>8} | {'Matches/Edge':>12}")
-# print("-" * 55)
-
-# for size in range(1, MAX_SIZE + 1):
-#     if not size_results[size]:
-#         continue
-        
-#     matches = size_results[size]
-#     min_val = min(matches)
-#     max_val = max(matches)
-#     mean_val = np.mean(matches)
-#     std_val = np.std(matches)
-#     density = mean_val / size  # Matches per edge
-    
-#     print(f"{size:4d} | {min_val:5d} | {max_val:5d} | {mean_val:8.2f} | {std_val:8.2f} | {density:12.2f}")
-
-# Calculate overall statistics
-all_matches_inter = [m for _, m in all_results_inter]
-
-# print("\nOverall statistics:")
-# print(f"Mean: {overall_mean:.2f}")
-# print(f"Std Dev: {overall_std:.2f}")
-# print(f"Mean + Std: {overall_mean + overall_std:.2f}")
-config.interpret_mean = np.mean(all_matches_inter)
-config.interpret_std = np.std(all_matches_inter)
-
-config.fidelity_mean = np.mean(all_results_fid)
-config.fidelity_std = np.std(all_results_fid)
-
-
+config.stability_mean = np.mean(all_results_stab)
+config.stability_std = np.std(all_results_stab)
  

@@ -93,6 +93,7 @@ class GNTK(object):
         return diag_list
 
     def gntk(self, g1, g2, diag_list1, diag_list2, A1, A2):
+        
         """
         compute the GNTK value \Theta(g1, g2)
         g1: graph1

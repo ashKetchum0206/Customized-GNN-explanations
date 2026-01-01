@@ -19,9 +19,44 @@ from gntk_combined import calculate_gntk_similarity
 
 def similarity_common_edges(graph1, graph2):
     
+    graph1 = set(graph1)
+    graph2 = set(graph2)
     return len(graph1 & graph2)/len(graph1 | graph2)
-    
 
+def most_similar_graphs(selected_edges, alter_graphs_all, num_graphs):
+
+    scores = []
+    if(config.sim_index == 'vgae'):
+        data1 = to_pyg_data(selected_edges)
+        for i in range(len(alter_graphs_all)):
+            scores.append((compare_graphs_greedy_node_matching(config.vgae_model, data1, to_pyg_data(alter_graphs_all[i])), i))
+
+    elif(config.sim_index == 'kernel'): 
+        graphs = [selected_edges]
+        for graph in alter_graphs_all:
+            graphs.append(graph)
+        
+        indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
+        for i in range(similarities.shape[0] - 1):
+            scores.append((similarities[0, i+1], indices[i]))
+
+    elif(config.sim_index == 'common_edges'):
+        for i, alter_graph in enumerate(alter_graphs_all):
+            scores.append((similarity_common_edges(selected_edges, alter_graph),i))
+    
+    elif(config.sim_index == 'gntk'):
+        data1 = to_pyg_data(selected_edges)
+        for i in range(len(alter_graphs_all)):
+            scores.append((calculate_gntk_similarity(data1, to_pyg_data(alter_graphs_all[i])),i))
+
+    scores.sort(key=lambda item: item[0], reverse = True)
+   
+    result = []
+    for score, i in scores:
+        result.append(i)
+
+    return result[:num_graphs]
+    
 def similarity_score(selected_edges, metric_weights=None):
 
     alter_graphs = config.alter_graphs
@@ -38,10 +73,12 @@ def similarity_score(selected_edges, metric_weights=None):
         for graph,_ in alter_graphs:
             graphs.append(graph)
         
-        similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
-        for i, (_, reward) in enumerate(alter_graphs):
-            score += reward * similarities[0, i+1]
-
+        indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
+        for i in range(similarities.shape[0] - 1):
+            score += similarities[0, i+1]
+        
+        return score/len(indices)
+             
     elif(config.sim_index == 'common_edges'):
         for alter_graph in alter_graphs:
             score += alter_graph[1] * similarity_common_edges(selected_edges, alter_graph[0])
@@ -51,7 +88,7 @@ def similarity_score(selected_edges, metric_weights=None):
         for i in range(len(alter_graphs)):
             score += alter_graphs[i][1] * calculate_gntk_similarity(data1, config.alter_graphs_pyg[i])
 
-    return [score]
+    return score/len(config.alter_graphs)
 
 def compute_interpretability(selected_edges: torch.Tensor) -> float:
     """
@@ -93,8 +130,8 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
     mask[list(selected_edges)] = True
     
     with torch.no_grad():
-        subgraph_pred = config.model(config.node_features, config.edge_index[:, mask])[0,config.original_pred].item()
-        complement_pred = config.model(config.node_features, config.edge_index[:, ~mask])[0,config.original_pred].item()
+        subgraph_pred = config.model(config.node_features, config.edge_index[:, mask])[0, config.original_pred].item()
+        complement_pred = config.model(config.node_features, config.edge_index[:, ~mask])[0, config.original_pred].item()
 
     # Calculate fidelity components
     fidelity_plus = abs(config.original_prob - complement_pred)
@@ -161,3 +198,12 @@ def explanation_reward (selected_edges: torch.Tensor,
         metric_weights['interpret'] * interpret_norm+
         metric_weights['fidelity'] * fidelity_norm
     )
+
+def combined_reward(selected_edges: torch.Tensor,
+                        metric_weights: Dict[str, float]
+                        
+    ) -> float:
+
+    explanation_scores = explanation_reward(selected_edges, metric_weights)
+    similarity_reward = (similarity_score(selected_edges) - config.stability_mean)/config.stability_std
+    return [explanation_scores[0], explanation_scores[1], explanation_scores[2], similarity_reward, explanation_scores[3] + metric_weights['stability'] * similarity_reward]

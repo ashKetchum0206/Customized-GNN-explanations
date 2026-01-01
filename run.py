@@ -2,7 +2,7 @@ import math
 import random
 import config
 from torch_geometric.data import Data
-from reward import explanation_reward, similarity_score
+from reward import explanation_reward, combined_reward, most_similar_graphs
 from constraint import constraint
 from model import GCN_2l, GIN
 import torch
@@ -29,7 +29,7 @@ vgae_model.to(device)
 config.vgae_model = vgae_model
 
 # Define metric weights
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1}
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1, 'stability': 1}
 config.metric_weights = metric_weights
 config.sim_index = "gntk"
 
@@ -72,7 +72,6 @@ for i in range(edge_index.size(1)):
 # Set edge_attr in config (needed by reward function)
 config.edge_attr = edge_attr
 
-
 # Initialize and run MCTS
 config.max_edges = 10
 config.allowed = range(len(edge_list))
@@ -105,12 +104,19 @@ config.alter_graphs.append((best_subset,best_reward[-1]))
 print('Stage 1 complete.')
 print(f'Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
 
+alter_graphs_all = []
 # Sample random graphs and get their explanations with the same user metrics preference
 for i in tqdm(range(2)):
 
     k = 0.8
     sampled_indices = random.sample(range(len(edge_list)), int(k*len(edge_list)))
-    config.allowed = sampled_indices
+    alter_graphs_all.append(sampled_indices)
+
+similar_graphs = most_similar_graphs(range(len(edge_list)), alter_graphs_all, 2) # return indices of the most similar graphs
+
+for similar_graph in similar_graphs:
+
+    config.allowed = alter_graphs_all[similar_graph]
 
     present_state = set()
     best_subset = set()
@@ -130,25 +136,29 @@ for i in tqdm(range(2)):
         except:
             break
 
-    config.alter_graphs.append((best_subset,best_reward[-1]))
+    config.alter_graphs.append((best_subset, best_reward[-1]))
     config.alter_graphs_pyg.append(to_pyg_data(best_subset))
 
 
 print(f'{len(config.alter_graphs)} smoothening graphs')
 print("Beginning Stage 2..")
 # Run MCTS with updated reward function
+
+exec(open("stability_norm.py").read(), globals())
+print("Stability parameters estimation complete")
+
 config.allowed = range(len(edge_list))
 present_state = set()
 best_subset = set()
-best_reward = [0,0,0,0]
+best_reward = [0,0,0,0,0]
 
-mcts = MCTS(main_model, x, edge_list, edge_index, similarity_score, metric_weights, 
+mcts = MCTS(main_model, x, edge_list, edge_index, combined_reward, metric_weights, 
             constraint, C=10, num_simulations=50, rollout_depth=100)
 
 for _ in tqdm(range(config.max_edges)):
     result = mcts.search(present_state).state
     present_state = result
-    reward = similarity_score(present_state)
+    reward = combined_reward(present_state, metric_weights)
     
     if(reward[-1] >= best_reward[-1]):
         best_reward = reward
@@ -156,9 +166,8 @@ for _ in tqdm(range(config.max_edges)):
 
 target_graph_data = to_pyg_data(best_subset)
 
-reward_tuple = explanation_reward(best_subset, metric_weights)
 print("Stage 2 complete.")
-print(f'Stability:{best_reward[0]}, Interpret:{reward_tuple[1]}, Fidelity:{reward_tuple[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
+print(f'Stability:{best_reward[3]}, Interpret:{best_reward[1]}, Fidelity:{best_reward[2]}, Prob:{F.softmax(config.model(data=target_graph_data),dim = 1)[:,config.original_pred].item()}')
 
 # Print results
 print("Best edge indices:", best_subset)

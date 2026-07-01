@@ -34,4 +34,4 @@ def constraint(selected_edges,log=False):
     # Step 3: Check if all nodes in the selected edges are visited
     if log:
         print(visited, nodes)
-    return visited == nodes and len(selected_edges) <= config.max_edges
+    return visited == nodes  and len(selected_edges) <= config.max_edges

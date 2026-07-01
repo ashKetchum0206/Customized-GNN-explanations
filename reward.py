@@ -7,8 +7,8 @@ from typing import Dict
 import torch
 import config
 from config import model, edge_list, node_features, original_pred, edge_index
-from WL_kernel import wl_subtree_kernel_similarity_grakel
-from subgraph_matching import subgraph_score
+# from WL_kernel import wl_subtree_kernel_similarity_grakel
+from subgraph_matching import subgraph_score, subgraph_score_learned
 from torch_geometric.data import Data
 import torch.nn.functional as F
 from torch.nn import CosineSimilarity
@@ -31,14 +31,14 @@ def most_similar_graphs(selected_edges, alter_graphs_all, num_graphs):
         for i in range(len(alter_graphs_all)):
             scores.append((compare_graphs_greedy_node_matching(config.vgae_model, data1, to_pyg_data(alter_graphs_all[i])), i))
 
-    elif(config.sim_index == 'kernel'): 
-        graphs = [selected_edges]
-        for graph in alter_graphs_all:
-            graphs.append(graph)
+    # elif(config.sim_index == 'kernel'): 
+    #     graphs = [selected_edges]
+    #     for graph in alter_graphs_all:
+    #         graphs.append(graph)
         
-        indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
-        for i in range(similarities.shape[0] - 1):
-            scores.append((similarities[0, i+1], indices[i]))
+    #     indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
+    #     for i in range(similarities.shape[0] - 1):
+    #         scores.append((similarities[0, i+1], indices[i]))
 
     elif(config.sim_index == 'common_edges'):
         for i, alter_graph in enumerate(alter_graphs_all):
@@ -68,16 +68,16 @@ def similarity_score(selected_edges, metric_weights=None):
         for i in range(len(alter_graphs)):
             score += alter_graphs[i][1] * compare_graphs_greedy_node_matching(config.vgae_model, data1, config.alter_graphs_pyg[i])
 
-    elif(config.sim_index == 'kernel'): 
-        graphs = [selected_edges]
-        for graph,_ in alter_graphs:
-            graphs.append(graph)
+    # elif(config.sim_index == 'kernel'): 
+    #     graphs = [selected_edges]
+    #     for graph,_ in alter_graphs:
+    #         graphs.append(graph)
         
-        indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
-        for i in range(similarities.shape[0] - 1):
-            score += similarities[0, i+1]
+    #     indices, similarities = wl_subtree_kernel_similarity_grakel(graphs, config.edge_index, config.node_features)
+    #     for i in range(similarities.shape[0] - 1):
+    #         score += similarities[0, i+1]
         
-        return score/len(indices)
+    #     return score/len(indices)
              
     elif(config.sim_index == 'common_edges'):
         for alter_graph in alter_graphs:
@@ -100,19 +100,8 @@ def compute_interpretability(selected_edges: torch.Tensor) -> float:
     Returns:
         float: Motif matching score from external subgraph matching system
     """
+    if(config.interp_index == 'learned'): return subgraph_score_learned(selected_edges)
     return subgraph_score(selected_edges)
-
-def compute_sparsity(selected_edges: torch.Tensor) -> int:
-    """
-    Calculate sparsity metric as simple edge count
-
-    Args:
-        selected_edges: Tensor of edge indices forming explanation subgraph
-
-    Returns:
-        int: Number of edges in explanation subgraph
-    """
-    return len(selected_edges) # can try other sparsification metrics
 
 def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, float]) -> float:
     """
@@ -146,7 +135,7 @@ def compute_fidelity(selected_edges: torch.Tensor, fidelity_weights: Dict[str, f
 
 def explanation_reward (selected_edges: torch.Tensor,
                         metric_weights: Dict[str, float] = config.metric_weights,
-                        fidelity_weights: Dict[str, float] = {'plus': 0.7, 'minus': 0.3},
+                        fidelity_weights: Dict[str, float] = {'plus': 0.7, 'minus': 0.3}
     ) -> float:
     """
     Calculate combined reward score for explanation subgraph
@@ -168,7 +157,7 @@ def explanation_reward (selected_edges: torch.Tensor,
         ValueError: If input tensors have mismatched dimensions
     """
     if len(selected_edges) == 0:
-        return -float('inf')
+        return [0]*4
 
     # Normalization constants (adjust based on dataset statistics)
     norm = {
@@ -179,22 +168,20 @@ def explanation_reward (selected_edges: torch.Tensor,
 
     # Calculate metric components
     interpret = compute_interpretability(selected_edges)
-    sparsity = compute_sparsity(selected_edges)
     fidelity = compute_fidelity(selected_edges, config.fidelity_weights)
+    
+    size = len(selected_edges)
 
     # Normalize metrics
-    interpret_norm = (interpret - config.interpret_mean)/config.interpret_std
-    sparsity_norm = sparsity / norm['max_edges']
-    fidelity_norm = (fidelity - config.fidelity_mean)/config.fidelity_std
-
+    interpret_norm = (interpret - config.size_results_inter[size]['mean'])/(config.size_results_inter[size]['std'] + 1e-3)
+    fidelity_norm = (fidelity - config.size_results_fid[size]['mean'])/(config.size_results_fid[size]['std'] + 1e-3)
+    
     # print(interpret_norm, sparsity_norm, fidelity_norm)
 
     # Combine weighted metrics
     return (
-        sparsity_norm,
         interpret_norm,
         fidelity_norm,
-        -metric_weights['sparse'] * sparsity_norm+
         metric_weights['interpret'] * interpret_norm+
         metric_weights['fidelity'] * fidelity_norm
     )
@@ -203,7 +190,8 @@ def combined_reward(selected_edges: torch.Tensor,
                         metric_weights: Dict[str, float]
                         
     ) -> float:
-
+    
+    size = len(selected_edges)
     explanation_scores = explanation_reward(selected_edges, metric_weights)
-    similarity_reward = (similarity_score(selected_edges) - config.stability_mean)/config.stability_std
-    return [explanation_scores[0], explanation_scores[1], explanation_scores[2], similarity_reward, explanation_scores[3] + metric_weights['stability'] * similarity_reward]
+    similarity_reward = (similarity_score(selected_edges) - config.size_results_stab[size]['mean'])/(config.size_results_stab[size]['std'] + 1e-3)
+    return [explanation_scores[0], explanation_scores[1], similarity_reward, explanation_scores[2] + metric_weights['stability'] * similarity_reward]

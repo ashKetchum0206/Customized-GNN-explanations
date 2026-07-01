@@ -25,3 +25,12 @@ sim_index = None
 alter_graphs_pyg = []
 vgae_model = None
 dataset_str = ""
+correlation = {}
+y = 0
+subgraph_matching_model = None 
+interp_index = None 
+size_results_fid = {}
+size_results_inter = {}
+size_results_stab = {}
+
+

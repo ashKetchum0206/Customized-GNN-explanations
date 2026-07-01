@@ -19,16 +19,20 @@ from VGAE_pyG.model import DeepVGAE
 from utils import create_ba2motif_query_graphs_pyg, create_mutag_query_graphs_pyg, create_proteins_query_graphs_pyg, create_bamultishapes_query_graphs_pyg 
 import json
 
-# dataset = mutag_dataset
-# dataset = ba2motif_dataset
-dataset = proteins_dataset
-# dataset = bamultishapes_dataset
+dataset_str = 'mutag'
 
-
-# create_mutag_query_graphs_pyg()
-# create_ba2motif_query_graphs_pyg()
-create_proteins_query_graphs_pyg()
-# create_bamultishapes_query_graphs_pyg()
+if(dataset_str == 'mutag'): 
+    dataset = mutag_dataset
+    create_mutag_query_graphs_pyg()
+elif(dataset_str == 'ba2motif'): 
+    dataset = ba2motif_dataset
+    create_ba2motif_query_graphs_pyg()
+elif(dataset_str == 'bamultishapes'): 
+    dataset = bamultishapes_dataset
+    create_bamultishapes_query_graphs_pyg()
+elif(dataset_str == 'proteins'): 
+    dataset = proteins_dataset
+    create_proteins_query_graphs_pyg()
 
 query_graphs = config.query_graphs
 
@@ -79,7 +83,7 @@ for i in range(len(dataset)):
             zero_count += 1 
             
         elif(dataset[graph_index].y == 1):
-            one_statistics[query_name] += score 
+            one_statistics[query_name] += score
             one_count += 1
             
 for key, value in zero_statistics.items():
@@ -88,29 +92,14 @@ for key, value in zero_statistics.items():
 for key, value in one_statistics.items():
     one_statistics[key] /= one_count
     
-# with open("zero_statistics_ba2motif.json", "w") as f:
-#     json.dump(zero_statistics, f, indent=4)  # indent makes it pretty-printed 
 
-# with open("zero_statistics_mutag.json", "w") as f:
-#     # json.dump(zero_statistics, f, indent=4)  # indent makes it pretty-printed 
-
-with open("zero_statistics_proteins.json", "w") as f:
+with open(f"motif statistics/zero_statistics_{dataset_str}.json", "w") as f:
     json.dump(zero_statistics, f, indent=4)  # indent makes it pretty-printed 
-
-# with open("zero_statistics_bamultishapes.json", "w") as f:
-    # json.dump(zero_statistics, f, indent=4)  # indent makes it pretty-printed 
     
-# with open("one_statistics_ba2motif.json", "w") as f:
-#     json.dump(one_statistics, f, indent=4)  # indent makes it pretty-printed
+with open(f"motif statistics/one_statistics_{dataset_str}.json", "w") as f:
+    json.dump(one_statistics, f, indent=4)  # indent makes it pretty-printed
+    
 
-# with open("one_statistics_mutag.json", "w") as f:
-#     json.dump(one_statistics, f, indent=4)  # indent makes it pretty-printed  
-
-with open("one_statistics_proteins.json", "w") as f:
-    json.dump(one_statistics, f, indent=4)  # indent makes it pretty-printed  
-
-# with open("one_statistics_bamultishapes.json", "w") as f:
-    # json.dump(one_statistics, f, indent=4)  # indent makes it pretty-printed  
 
 
         

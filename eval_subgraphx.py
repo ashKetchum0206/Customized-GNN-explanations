@@ -60,6 +60,7 @@ def parse_args():
     parser.add_argument('--kaggle', type=int)
     parser.add_argument('--interp_index', type=str) # learned or hard
     parser.add_argument('--max_nodes', type=int)
+    parser.add_argument('--eval_stab', type=int)
     return parser.parse_args()
 
 args = parse_args()
@@ -71,6 +72,7 @@ config.dataset_str = dataset_str
 kaggle = args.kaggle
 interp_index = args.interp_index
 max_nodes = args.max_nodes
+eval_stab = args.eval_stab
 # ------------------------------------------
 
 if(dataset_str == 'mutag'): dataset = mutag_dataset
@@ -236,7 +238,11 @@ for k in tqdm(range(begin_index, end_index)):
         reward = explanation_reward(best_edge_state_main, metric_weights)
         net_interpret += reward[0] * config.size_results_inter[size]['std'] + config.size_results_inter[size]['mean']
         net_fidelity += reward[1] * config.size_results_fid[size]['std'] + config.size_results_fid[size]['mean']
-
+        
+        if not eval_stab:
+            num_graphs_processed += 1
+            continue 
+            
         config.alter_graphs = []
         config.alter_graphs_pyg = []
         alter_graphs_all = []
@@ -269,7 +275,7 @@ for k in tqdm(range(begin_index, end_index)):
 
         exec(open("stability_norm.py").read(), globals())
         print("proc_done ", proc_done)
-        net_stability += combined_reward(best_edge_state_main, metric_weights)[2]
+        net_stability += combined_reward(best_edge_state_main, metric_weights)[2] * config.size_results_stab[size]['std'] + config.size_results_stab[size]['mean']
         num_graphs_processed += 1
 
         # final_subset_vector = np.zeros((1,max_edges))
@@ -286,7 +292,7 @@ for k in tqdm(range(begin_index, end_index)):
         print(e)
         continue
     
-
+    
 # --- [MODIFIED] Use the calculated number of graphs for division ---
 if num_graphs_processed > 0:
     print(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---")

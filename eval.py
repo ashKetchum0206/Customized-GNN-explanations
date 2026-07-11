@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument('--kaggle', type=int)
     parser.add_argument('--interp_index', type=str) # learned or hard
     parser.add_argument('--max_edges', type=int)
+    parser.add_argument('--write_to_file', type=int, default=0)
     return parser.parse_args()
 
 args = parse_args()
@@ -58,7 +59,7 @@ elif(dataset_str == 'bamultishapes'): dataset = bamultishapes_dataset
 elif(dataset_str == 'proteins'): dataset = proteins_dataset
 
 
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1, 'stability': 1}
+metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 10, 'stability': 1}
 config.metric_weights = metric_weights
 fidelity_weights = {'plus': 0.5, 'minus': 0.5}
 config.fidelity_weights = fidelity_weights
@@ -412,13 +413,21 @@ for k in tqdm(range(begin_index, end_index)):
 # --- [MODIFIED] Use the calculated number of graphs for division ---
 if num_graphs_processed > 0:
     
-    with open(f'results_{begin_index}-{end_index-1}_{dataset_str}_{sim_index}_{config.max_edges}.txt', 'w') as f:
-        f.write(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---" + '\n')
-        f.write(f"Total Graphs Processed: {num_graphs_processed}" + '\n')
-        f.write(f"Stability score: {net_stability/num_graphs_processed}" + '\n')
-        f.write(f"Fidelity score: {net_fidelity/num_graphs_processed}" + '\n')
-        f.write(f"Interpretability score: {net_interpret/num_graphs_processed}" + '\n')
+    if args.write_to_file:
+        with open(f'results/results_{begin_index}-{end_index-1}_{dataset_str}_{sim_index}_{config.max_edges}.txt', 'w') as f:
+            f.write(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---" + '\n')
+            f.write(f"Total Graphs Processed: {num_graphs_processed}" + '\n')
+            f.write(f"Stability score: {net_stability/num_graphs_processed}" + '\n')
+            f.write(f"Fidelity score: {net_fidelity/num_graphs_processed}" + '\n')
+            f.write(f"Interpretability score: {net_interpret/num_graphs_processed}" + '\n')
     
+    else:
+        print(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---" + '\n')
+        print(f"Total Graphs Processed: {num_graphs_processed}" + '\n')
+        print(f"Stability score: {net_stability/num_graphs_processed}" + '\n')
+        print(f"Fidelity score: {net_fidelity/num_graphs_processed}" + '\n')
+        print(f"Interpretability score: {net_interpret/num_graphs_processed}" + '\n')
+        
     # if(kaggle):
     #     os.chdir("/kaggle/working")
         

@@ -9,7 +9,7 @@ import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 from MCTS_algo import MCTS
-from utils import to_networkx_graph, mutag_dataset, ba2motif_dataset
+from utils import to_networkx_graph, mutag_dataset, ba2motif_dataset, bamultishapes_dataset, proteins_dataset
 from subgraph_matching import subgraph_score
 from networkx.algorithms.isomorphism import GraphMatcher
 from tqdm import tqdm
@@ -18,8 +18,10 @@ from utils import to_pyg_data
 from VGAE_pyG.model import DeepVGAE
 from utils import create_mutag_query_graphs, create_ba2motif_query_graphs
 from utils import create_mutag_query_graphs_pyg, create_ba2motif_query_graphs_pyg, generate_random_walk_seed
+from utils import create_proteins_query_graphs_pyg, create_bamultishapes_query_graphs_pyg
 from utils import get_induced_edges
 from smooth_subgraph_matching import NeuroMatchEncoder
+from training_proteins import GIN as GIN_proteins
 # --- [NEW] Import argparse for command-line arguments ---
 import argparse
 import os
@@ -61,6 +63,9 @@ def parse_args():
     parser.add_argument('--interp_index', type=str) # learned or hard
     parser.add_argument('--max_nodes', type=int)
     parser.add_argument('--eval_stab', type=int)
+    parser.add_argument('--indices_path', type=str, default=None,
+                        help='Path to a .npy file of explicit graph indices to evaluate. '
+                             'When given, overrides --begin/--end.')
     return parser.parse_args()
 
 args = parse_args()
@@ -73,10 +78,17 @@ kaggle = args.kaggle
 interp_index = args.interp_index
 max_nodes = args.max_nodes
 eval_stab = args.eval_stab
+
+if args.indices_path is not None:
+    graph_indices = np.load(args.indices_path).tolist()
+else:
+    graph_indices = list(range(begin_index, end_index))
 # ------------------------------------------
 
 if(dataset_str == 'mutag'): dataset = mutag_dataset
 elif(dataset_str == 'ba2motif'): dataset = ba2motif_dataset
+elif(dataset_str == 'bamultishapes'): dataset = bamultishapes_dataset
+elif(dataset_str == 'proteins'): dataset = proteins_dataset
 
 metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 1, 'stability': 1}
 config.metric_weights = metric_weights
@@ -147,7 +159,80 @@ elif(dataset_str == 'ba2motif'):
         zero_statistics = json.load(f)
     with open("motif statistics/one_statistics_ba2motif.json", "r") as f:
         one_statistics = json.load(f)
-    config.correlation[1] = one_statistics 
+    config.correlation[1] = one_statistics
+    config.correlation[0] = zero_statistics
+
+elif(dataset_str == 'proteins'):
+    main_model = GIN_proteins(
+    input_dim=dataset.num_node_features,
+    hidden_dim=128, # Drop dim slightly from 300 to 128 for easier convergence on PROTEINS
+    output_dim=2,
+    multi=True
+    )
+    main_model.load_state_dict(torch.load('models/GIN_model_PROTEINS.pt', map_location=torch.device('cpu'), weights_only=True))
+    enc_in_channels = dataset[0].x.shape[1]
+    enc_hidden_channels = 64
+    enc_out_channels = 32
+    vgae_model = DeepVGAE(enc_in_channels, enc_hidden_channels, enc_out_channels).to(device)
+    vgae_model.load_state_dict(torch.load('VGAE_model_PROTEINS.pt'))
+
+    if(interp_index == 'learned'):
+        NODE_FEATURE_DIM = dataset[0].x.shape[1]
+        HIDDEN_DIM = 64
+        EMBEDDING_DIM = 64
+
+        matching_model = NeuroMatchEncoder(input_dim=NODE_FEATURE_DIM,
+                                hidden_dim=HIDDEN_DIM,
+                                output_dim=EMBEDDING_DIM).to(device)
+
+        matching_model.load_state_dict(torch.load('proteins_subgraph_matching.pt'))
+        config.subgraph_matching_model = matching_model
+        create_proteins_query_graphs_pyg()
+    elif(interp_index == 'hard'):
+        create_ba2motif_query_graphs()
+
+    with open("motif statistics/zero_statistics_proteins.json", "r") as f:
+        zero_statistics = json.load(f)
+    with open("motif statistics/one_statistics_proteins.json", "r") as f:
+        one_statistics = json.load(f)
+    config.correlation[1] = one_statistics
+    config.correlation[0] = zero_statistics
+
+elif(dataset_str == 'bamultishapes'):
+
+    main_model = GIN(
+    input_dim=dataset.num_node_features,
+    hidden_dim=64, # Scaled down for faster local training
+    output_dim=2,
+    multi=True)
+
+    main_model.load_state_dict(torch.load('models/GIN_model_BA_SHAPES.pt', map_location=torch.device('cpu'), weights_only=True))
+    enc_in_channels = dataset[0].x.shape[1]
+    enc_hidden_channels = 64
+    enc_out_channels = 32
+    vgae_model = DeepVGAE(enc_in_channels, enc_hidden_channels, enc_out_channels).to(device)
+    vgae_model.load_state_dict(torch.load('VGAE_model_BAMultiShapes.pt'))
+
+    if(interp_index == 'learned'):
+        NODE_FEATURE_DIM = dataset[0].x.shape[1]
+        HIDDEN_DIM = 64
+        EMBEDDING_DIM = 64
+
+        matching_model = NeuroMatchEncoder(input_dim=NODE_FEATURE_DIM,
+                                hidden_dim=HIDDEN_DIM,
+                                output_dim=EMBEDDING_DIM).to(device)
+
+        matching_model.load_state_dict(torch.load('bamultishapes_subgraph_matching.pt'))
+        config.subgraph_matching_model = matching_model
+        create_bamultishapes_query_graphs_pyg()
+    elif(interp_index == 'hard'):
+        create_ba2motif_query_graphs()
+
+    with open("motif statistics/zero_statistics_bamultishapes.json", "r") as f:
+        zero_statistics = json.load(f)
+    with open("motif statistics/one_statistics_bamultishapes.json", "r") as f:
+        one_statistics = json.load(f)
+    config.correlation[1] = one_statistics
     config.correlation[0] = zero_statistics
 
 config.vgae_model = vgae_model
@@ -199,9 +284,9 @@ def get_subgraphx_prediction(x, edge_index, num_nodes):
     return best_edge_state
     
     
-explanations = None 
-# --- [MODIFIED] Use range(begin_index, end_index) for the loop ---
-for k in tqdm(range(begin_index, end_index)):
+explanations = None
+# --- [MODIFIED] Iterate over graph_indices (range or explicit --indices_path list) ---
+for k in tqdm(graph_indices):
 # -----------------------------------------------------------------
     try:  
         config.graph_index = k
@@ -291,20 +376,25 @@ for k in tqdm(range(begin_index, end_index)):
     except Exception as e:
         print(e)
         continue
-    
+
     
 # --- [MODIFIED] Use the calculated number of graphs for division ---
+if args.indices_path is not None:
+    range_desc = f"indices file {args.indices_path} ({len(graph_indices)} graphs)"
+else:
+    range_desc = f"Graph Indices {begin_index} to {end_index-1}"
+
 if num_graphs_processed > 0:
-    print(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---")
+    print(f"--- Results for {range_desc} ---")
     print(f"Total Graphs Processed: {num_graphs_processed}")
     print(f"Stability score: {net_stability/num_graphs_processed}")
     print(f"Fidelity score: {net_fidelity/num_graphs_processed}")
     print(f"Interpretability score: {net_interpret/num_graphs_processed}")
-    
+
     # if(kaggle):
     #     os.chdir("/kaggle/working")
-        
+
     # np.save(f'{begin_index}-{end_index-1}_{dataset_str}_{sim_index}', explanations)
 else:
-    print("No graphs were processed (begin_index >= end_index).")
+    print(f"No graphs were processed ({range_desc}).")
 # -----------------------------------------------------------------

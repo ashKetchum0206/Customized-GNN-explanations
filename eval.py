@@ -41,6 +41,18 @@ def parse_args():
     parser.add_argument('--interp_index', type=str) # learned or hard
     parser.add_argument('--max_edges', type=int)
     parser.add_argument('--write_to_file', type=int, default=0)
+    parser.add_argument('--output_dir', type=str, default='results',
+                        help='Directory to write results files into (default: results).')
+    # --- [NEW] Per-metric weight overrides for the regret-vs-specialist analysis ---
+    # Default to None so we can detect "not provided" and fall back to the
+    # historical defaults below, preserving backward compatibility.
+    parser.add_argument('--fidelity_weight', type=float, default=None,
+                        help='Relative weight of the fidelity term in the reward (default: 10).')
+    parser.add_argument('--interpret_weight', type=float, default=None,
+                        help='Relative weight of the interpretability term in the reward (default: 1).')
+    parser.add_argument('--stability_weight', type=float, default=None,
+                        help='Relative weight of the stability term in the reward (default: 1).')
+    # ---------------------------------------------------------------------------
     return parser.parse_args()
 
 args = parse_args()
@@ -59,7 +71,12 @@ elif(dataset_str == 'bamultishapes'): dataset = bamultishapes_dataset
 elif(dataset_str == 'proteins'): dataset = proteins_dataset
 
 
-metric_weights = {'sparse': 1, 'interpret': 1, 'fidelity': 10, 'stability': 1}
+metric_weights = {
+    'sparse': 1,
+    'interpret': args.interpret_weight if args.interpret_weight is not None else 1,
+    'fidelity': args.fidelity_weight if args.fidelity_weight is not None else 10,
+    'stability': args.stability_weight if args.stability_weight is not None else 1,
+}
 config.metric_weights = metric_weights
 fidelity_weights = {'plus': 0.5, 'minus': 0.5}
 config.fidelity_weights = fidelity_weights
@@ -412,18 +429,30 @@ for k in tqdm(range(begin_index, end_index)):
 
 # --- [MODIFIED] Use the calculated number of graphs for division ---
 if num_graphs_processed > 0:
-    
+
+    # --- [NEW] Tag output filename with non-default metric weights so that
+    # specialist-configuration runs (used for per-metric regret analysis)
+    # don't overwrite each other's results. Default runs keep the original
+    # filename for backward compatibility.
+    weights_overridden = any(w is not None for w in
+                              (args.interpret_weight, args.fidelity_weight, args.stability_weight))
+    weights_suffix = (f"_i{metric_weights['interpret']}_f{metric_weights['fidelity']}_s{metric_weights['stability']}"
+                       if weights_overridden else "")
+
     if args.write_to_file:
-        with open(f'results/results_{begin_index}-{end_index-1}_{dataset_str}_{sim_index}_{config.max_edges}.txt', 'w') as f:
+        os.makedirs(args.output_dir, exist_ok=True)
+        with open(f'{args.output_dir}/results_{begin_index}-{end_index-1}_{dataset_str}_{sim_index}_{config.max_edges}{weights_suffix}.txt', 'w') as f:
             f.write(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---" + '\n')
             f.write(f"Total Graphs Processed: {num_graphs_processed}" + '\n')
+            f.write(f"Metric weights: {metric_weights}" + '\n')
             f.write(f"Stability score: {net_stability/num_graphs_processed}" + '\n')
             f.write(f"Fidelity score: {net_fidelity/num_graphs_processed}" + '\n')
             f.write(f"Interpretability score: {net_interpret/num_graphs_processed}" + '\n')
-    
+
     else:
         print(f"--- Results for Graph Indices {begin_index} to {end_index-1} ---" + '\n')
         print(f"Total Graphs Processed: {num_graphs_processed}" + '\n')
+        print(f"Metric weights: {metric_weights}" + '\n')
         print(f"Stability score: {net_stability/num_graphs_processed}" + '\n')
         print(f"Fidelity score: {net_fidelity/num_graphs_processed}" + '\n')
         print(f"Interpretability score: {net_interpret/num_graphs_processed}" + '\n')
